@@ -1,10 +1,14 @@
 {
-  "name": "AI-Powered-Knowledge-OS ",
+  "name": "atlas",
+  "private": "true",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "pnpm --parallel --filter './apps/*' dev",
+    "build": "pnpm --recursive --filter './apps/*' build",
+    "lint": "pnpm --recursive lint",
+    "test": "pnpm --recursive test"
   },
   "keywords": [],
   "author": "",
