@@ -1,0 +1,2 @@
+
+process.loadEnvFile("../../.env");
