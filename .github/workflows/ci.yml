@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Build
+        run: pnpm --filter @atlas/api build
+
+      - name: Test
+        run: pnpm --filter @atlas/api test
+        env:
+          NODE_ENV: test
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test
+          POSTGRES_PORT: 5432
+          POSTGRES_HOST: localhost
+          REDIS_PORT: 6379
+          REDIS_HOST: localhost
+          MINIO_ROOT_USER: test
+          MINIO_ROOT_PASSWORD: testtesttest
+          MINIO_PORT: 9000
+          MINIO_HOST: localhost
