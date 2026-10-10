@@ -8,3 +8,5 @@ build/
 .DS_Store
 .turbo/
 coverage/
+*.js.map
+*.d.ts.map
