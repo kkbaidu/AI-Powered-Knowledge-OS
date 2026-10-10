@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "pnpm --parallel --filter './apps/*' dev",
     "build": "pnpm --recursive --filter './apps/*' build",
-    "lint": "eslint src --max-warnings=0",
+    "lint": "pnpm --recursive lint",
     "test": "pnpm --recursive test"
   },
   "keywords": [],
