@@ -1,0 +1,1125 @@
+{
+  "id": "0e28c437-2927-4b3a-8d9e-67dcd2fa46e4",
+  "prevIds": [
+    "a1659814-2708-485a-bc38-a864b8ef18c5"
+  ],
+  "version": "8",
+  "dialect": "postgres",
+  "ddl": [
+    {
+      "values": [
+        "active",
+        "suspended"
+      ],
+      "name": "member_status",
+      "entityType": "enums",
+      "schema": "public"
+    },
+    {
+      "values": [
+        "pending_verification",
+        "active",
+        "suspended"
+      ],
+      "name": "user_status",
+      "entityType": "enums",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "organization_members",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "organizations",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "permissions",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "role_permissions",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "roles",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "sessions",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "users",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "organization_members"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "organization_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "organization_members"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "organization_members"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "role_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "organization_members"
+    },
+    {
+      "type": "member_status",
+      "typeSchema": "public",
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'active'",
+      "generated": null,
+      "identity": null,
+      "name": "status",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "organization_members"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "joined_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "organization_members"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "organization_members"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "organization_members"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "organizations"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "name",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "organizations"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "slug",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "organizations"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "owner_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "organizations"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "organizations"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "organizations"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "permissions"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "name",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "permissions"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "description",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "permissions"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "role_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "role_permissions"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "permission_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "role_permissions"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "roles"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "organization_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "roles"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "name",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "roles"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "false",
+      "generated": null,
+      "identity": null,
+      "name": "is_default",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "roles"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "roles"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "roles"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "sessions"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "sessions"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "refresh_token_hash",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "sessions"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "previous_token_hash",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "sessions"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "device_info",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "sessions"
+    },
+    {
+      "type": "inet",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "ip_address",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "sessions"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "false",
+      "generated": null,
+      "identity": null,
+      "name": "revoked",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "sessions"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "expires_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "sessions"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "last_used_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "sessions"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "sessions"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "sessions"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "users"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "email",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "users"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "password_hash",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "users"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "display_name",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "users"
+    },
+    {
+      "type": "user_status",
+      "typeSchema": "public",
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'pending_verification'",
+      "generated": null,
+      "identity": null,
+      "name": "status",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "users"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "users"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "users"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "organization_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "user_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "org_members_org_user_uq",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "organization_members"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "user_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "org_members_user_id_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "organization_members"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "role_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "org_members_role_id_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "organization_members"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "slug",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "organizations_slug_uq",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "organizations"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "owner_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "organizations_owner_id_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "organizations"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "name",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "permissions_name_uq",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "permissions"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "permission_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "role_permissions_permission_id_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "role_permissions"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "organization_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "name",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "roles_org_name_uq",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "roles"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "refresh_token_hash",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "sessions_refresh_token_hash_uq",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "sessions"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "previous_token_hash",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "sessions_previous_token_hash_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "sessions"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "user_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "sessions_user_id_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "sessions"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "expires_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "sessions_expires_at_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "sessions"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "lower(\"email\")",
+          "isExpression": true,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "users_email_lower_uq",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "users"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "organization_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "organizations",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "organization_members_organization_id_organizations_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "organization_members"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "user_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "users",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "organization_members_user_id_users_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "organization_members"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "role_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "roles",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "RESTRICT",
+      "name": "organization_members_role_id_roles_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "organization_members"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "owner_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "users",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "RESTRICT",
+      "name": "organizations_owner_id_users_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "organizations"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "role_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "roles",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "role_permissions_role_id_roles_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "role_permissions"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "permission_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "permissions",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "role_permissions_permission_id_permissions_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "role_permissions"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "organization_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "organizations",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "roles_organization_id_organizations_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "roles"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "user_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "users",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "sessions_user_id_users_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "sessions"
+    },
+    {
+      "columns": [
+        "role_id",
+        "permission_id"
+      ],
+      "nameExplicit": false,
+      "name": "role_permissions_pkey",
+      "entityType": "pks",
+      "schema": "public",
+      "table": "role_permissions"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "organization_members_pkey",
+      "schema": "public",
+      "table": "organization_members",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "organizations_pkey",
+      "schema": "public",
+      "table": "organizations",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "permissions_pkey",
+      "schema": "public",
+      "table": "permissions",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "roles_pkey",
+      "schema": "public",
+      "table": "roles",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "sessions_pkey",
+      "schema": "public",
+      "table": "sessions",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "users_pkey",
+      "schema": "public",
+      "table": "users",
+      "entityType": "pks"
+    }
+  ],
+  "renames": []
+}
