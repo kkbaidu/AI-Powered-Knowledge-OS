@@ -1,12 +1,15 @@
 import { and, eq } from "drizzle-orm";
-import type { Database } from "./index";
-import { permissions, rolePermissions, roles } from "./schema";
-import { DEFAULT_ROLES } from "./seed-data";
+import type { DbExecutor } from "./client.js";
+import { permissions, rolePermissions, roles } from "./schema/index.js";
+import { DEFAULT_ROLES } from "./seed-data.js";
 
-type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
-type Executor = Database | Tx;
-
-export async function provisionDefaultRoles(executor: Executor, organizationId: string) {
+// Copies the default roles (and their permissions) into one organization.
+// Call it inside the same transaction that creates the organization.
+// Idempotent: safe to call twice for the same organization.
+export async function provisionDefaultRoles(
+  executor: DbExecutor,
+  organizationId: string,
+): Promise<void> {
   const perms = await executor
     .select({ id: permissions.id, name: permissions.name })
     .from(permissions);
@@ -19,23 +22,24 @@ export async function provisionDefaultRoles(executor: Executor, organizationId: 
       .onConflictDoNothing()
       .returning({ id: roles.id });
 
-    // on conflict, nothing is returned, so fetch the existing row
-    const roleId =
-      inserted?.id ??
-      (
-        await executor
-          .select({ id: roles.id })
-          .from(roles)
-          .where(and(eq(roles.organizationId, organizationId), eq(roles.name, roleName)))
-      )[0].id;
+    // On conflict nothing is returned, so fetch the existing row.
+    let roleId = inserted?.id;
+    if (!roleId) {
+      const [existing] = await executor
+        .select({ id: roles.id })
+        .from(roles)
+        .where(and(eq(roles.organizationId, organizationId), eq(roles.name, roleName)));
+      if (!existing) throw new Error(`Role ${roleName} missing after upsert`);
+      roleId = existing.id;
+    }
 
     const rows = permNames.map((name) => {
       const permissionId = permIdByName.get(name);
       if (!permissionId) throw new Error(`Permission not seeded: ${name}`);
-      return { roleId, permissionId };
+      return { roleId: roleId as string, permissionId };
     });
 
-    if (rows.length) {
+    if (rows.length > 0) {
       await executor.insert(rolePermissions).values(rows).onConflictDoNothing();
     }
   }

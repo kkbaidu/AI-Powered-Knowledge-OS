@@ -20,10 +20,10 @@ export const PERMISSIONS = [
 
 export type PermissionName = (typeof PERMISSIONS)[number]["name"];
 
-const ALL = PERMISSIONS.map((p) => p.name);
-const OWNER_ONLY: PermissionName[] = ["organization.delete", "billing.manage"];
+const ALL: readonly PermissionName[] = PERMISSIONS.map((p) => p.name);
+const OWNER_ONLY: readonly PermissionName[] = ["organization.delete", "billing.manage"];
 
-// The role -> permission matrix. Copied into each org at creation.
+// Role -> permission matrix. Copied into each organization at creation.
 export const DEFAULT_ROLES: Record<string, readonly PermissionName[]> = {
   Owner: ALL,
   Admin: ALL.filter((p) => !OWNER_ONLY.includes(p)),

@@ -12,13 +12,14 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-// timestamptz everywhere: stored as UTC instants, rendered per client timezone
+// timestamptz everywhere: stored as a UTC instant, rendered per client timezone.
+// NOTE: $onUpdate is applied by Drizzle only; raw SQL updates bypass it.
 const timestamps = {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow()
-    .$onUpdate(() => new Date()), // ORM-level only: raw SQL updates bypass it
+    .$onUpdate(() => new Date()),
 };
 
 export const userStatus = pgEnum("user_status", [
@@ -56,9 +57,9 @@ export const sessions = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    // we store SHA-256 hashes, never the raw refresh token
+    // SHA-256 of the refresh token; the raw token is never stored
     refreshTokenHash: text("refresh_token_hash").notNull(),
-    // the hash before the last rotation, used for reuse detection
+    // hash before the last rotation, used for refresh-token reuse detection
     previousTokenHash: text("previous_token_hash"),
     deviceInfo: text("device_info"),
     ipAddress: inet("ip_address"),
@@ -68,7 +69,7 @@ export const sessions = pgTable(
     ...timestamps,
   },
   (t) => [
-    // the hot path: POST /auth/refresh looks up by hash
+    // hot path: POST /auth/refresh looks up by hash
     uniqueIndex("sessions_refresh_token_hash_uq").on(t.refreshTokenHash),
     // reuse detection looks up by the previous hash
     index("sessions_previous_token_hash_idx").on(t.previousTokenHash),
@@ -86,8 +87,8 @@ export const organizations = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     name: text("name").notNull(),
     slug: text("slug").notNull(),
-    // RESTRICT: you cannot delete a user who owns an org.
-    // Ownership must be transferred first (a conscious act).
+    // RESTRICT: a user who owns an org cannot be deleted until ownership is
+    // transferred. Deletion must be a conscious act.
     ownerId: uuid("owner_id")
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
@@ -115,6 +116,7 @@ export const roles = pgTable(
   "roles",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    // CASCADE: deleting an org removes its roles
     organizationId: uuid("organization_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
@@ -155,7 +157,7 @@ export const organizationMembers = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    // RESTRICT: you cannot delete a role while members still hold it
+    // RESTRICT: a role cannot be deleted while members still hold it
     roleId: uuid("role_id")
       .notNull()
       .references(() => roles.id, { onDelete: "restrict" }),

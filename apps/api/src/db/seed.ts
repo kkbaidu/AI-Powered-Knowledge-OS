@@ -1,24 +1,34 @@
-import "dotenv/config"; // must be first so DATABASE_URL exists before db is imported
 import { sql } from "drizzle-orm";
-import { db, pool } from "./index";
-import { permissions } from "./schema";
-import { PERMISSIONS } from "./seed-data";
+import { config } from "../config.js";
+import { logger } from "../logger.js";
+import { createPostgresPool } from "../infra/postgres.js";
+import { createDb } from "./client.js";
+import { permissions } from "./schema/index.js";
+import { PERMISSIONS } from "./seed-data.js";
 
+// Seeds the global permission catalogue. Idempotent: re-running updates
+// descriptions and never duplicates rows. Default roles are NOT seeded here;
+// they are copied per organization by provisionDefaultRoles().
 async function main() {
-  await db
-    .insert(permissions)
-    .values(PERMISSIONS.map((p) => ({ name: p.name, description: p.description })))
-    .onConflictDoUpdate({
-      target: permissions.name,
-      set: { description: sql`excluded.description` }, // keeps descriptions in sync
-    });
+  const pool = createPostgresPool(config.postgres);
+  const db = createDb(pool);
 
-  console.log(`Seeded ${PERMISSIONS.length} permissions`);
+  try {
+    await db
+      .insert(permissions)
+      .values(PERMISSIONS.map((p) => ({ name: p.name, description: p.description })))
+      .onConflictDoUpdate({
+        target: permissions.name,
+        set: { description: sql`excluded.description` },
+      });
+
+    logger.info(`Seeded ${PERMISSIONS.length} permissions`);
+  } finally {
+    await pool.end();
+  }
 }
 
-main()
-  .catch((err) => {
-    console.error("Seed failed", err);
-    process.exitCode = 1;
-  })
-  .finally(() => pool.end());
+main().catch((err) => {
+  logger.error(err, "Seed failed");
+  process.exit(1);
+});
