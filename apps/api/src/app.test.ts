@@ -68,7 +68,7 @@ describe("GET /api/v1/health", () => {
     expect(res.status).toBe(404);
     expect(res.body).toEqual({
       success: false,
-      error: { code: "NOT_FOUND", message: "Route GET /api/v1/nonsense not found" },
+      error: { code: "ROUTE_NOT_FOUND", message: "Route GET /api/v1/nonsense not found" },
     });
   });
 });

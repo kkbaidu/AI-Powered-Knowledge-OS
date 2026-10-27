@@ -19,45 +19,66 @@ const envSchema = z.object({
   MINIO_HOST: z.string().default("localhost"),
 });
 
-function loadConfig() {
-  const result = envSchema.safeParse(process.env);
+export class ConfigError extends Error {
+  constructor(readonly issues: string[]) {
+    super(`Invalid environment configuration:\n${issues.map((i) => `  - ${i}`).join("\n")}`);
+    this.name = "ConfigError";
+  }
+}
+
+// Pure and testable: takes an env object, returns frozen config or throws ConfigError.
+export function parseConfig(env: NodeJS.ProcessEnv) {
+  const result = envSchema.safeParse(env);
 
   if (!result.success) {
-    console.error("❌ Invalid environment configuration:\n");
-    for (const issue of result.error.issues) {
-      console.error(`  - ${issue.path.join(".")}: ${issue.message}`);
-    }
-    process.exit(1);
+    throw new ConfigError(
+      result.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`),
+    );
   }
 
-  const env = result.data;
+  const e = result.data;
 
   return Object.freeze({
-    env: env.NODE_ENV,
-    port: env.PORT,
-    isProduction: env.NODE_ENV === "production",
+    env: e.NODE_ENV,
+    port: e.PORT,
+    isProduction: e.NODE_ENV === "production",
 
     postgres: Object.freeze({
-      host: env.POSTGRES_HOST,
-      port: env.POSTGRES_PORT,
-      user: env.POSTGRES_USER,
-      password: env.POSTGRES_PASSWORD,
-      database: env.POSTGRES_DB,
+      host: e.POSTGRES_HOST,
+      port: e.POSTGRES_PORT,
+      user: e.POSTGRES_USER,
+      password: e.POSTGRES_PASSWORD,
+      database: e.POSTGRES_DB,
     }),
 
     redis: Object.freeze({
-      host: env.REDIS_HOST,
-      port: env.REDIS_PORT,
+      host: e.REDIS_HOST,
+      port: e.REDIS_PORT,
     }),
 
     minio: Object.freeze({
-      host: env.MINIO_HOST,
-      port: env.MINIO_PORT,
-      rootUser: env.MINIO_ROOT_USER,
-      rootPassword: env.MINIO_ROOT_PASSWORD,
+      host: e.MINIO_HOST,
+      port: e.MINIO_PORT,
+      rootUser: e.MINIO_ROOT_USER,
+      rootPassword: e.MINIO_ROOT_PASSWORD,
     }),
   });
 }
 
+export type Config = ReturnType<typeof parseConfig>;
+
+// Fail fast: a bad environment stops the process at boot with a clear message,
+// instead of surfacing as a confusing error on the first request that needs it.
+function loadConfig(): Config {
+  try {
+    return parseConfig(process.env);
+  } catch (err) {
+    if (err instanceof ConfigError) {
+      console.error(`❌ ${err.message}`);
+      process.exit(1);
+    }
+    throw err;
+  }
+}
+
 export const config = loadConfig();
-export type Config = typeof config;
