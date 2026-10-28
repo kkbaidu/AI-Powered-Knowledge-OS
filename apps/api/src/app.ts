@@ -1,23 +1,20 @@
 import express, { type Express } from "express";
-import type { Pool } from "pg";
-import type { Redis } from "ioredis";
 import { requestId } from "./http/middleware/requestId.js";
 import { httpLogger } from "./http/middleware/httpLogger.js";
 import { errorHandler } from "./http/middleware/errorHandler.js";
 import { notFound } from "./http/middleware/notFound.js";
-import { healthRouter } from "./http/routes/health.js";
+import { healthRouter, type HealthDeps } from "./http/routes/health.js";
 
-export interface AppDependencies {
-  pgPool: Pool;
-  redis: Redis;
-}
+// Everything the app needs injected: today that is exactly what health checks use.
+export type AppDependencies = HealthDeps;
 
 export function createApp(deps: AppDependencies): Express {
   const app = express();
+  app.disable("x-powered-by"); // do not advertise the framework
 
   app.use(requestId);
   app.use(httpLogger);
-  app.use(express.json());
+  app.use(express.json({ limit: "1mb" })); // oversize bodies become 413 via the error handler
 
   app.use("/api/v1", healthRouter(deps));
 

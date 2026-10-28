@@ -9,7 +9,8 @@ async function main() {
   const pgPool = createPostgresPool(config.postgres);
   const redis = createRedisClient(config.redis);
 
-  const app = createApp({ pgPool, redis });
+  let shuttingDown = false;
+  const app = createApp({ pgPool, redis, isShuttingDown: () => shuttingDown });
   const server = createServer(app);
 
   server.listen(config.port, () => {
@@ -18,6 +19,7 @@ async function main() {
 
   async function shutdown(signal: string): Promise<void> {
     logger.info(`Received ${signal}, shutting down gracefully...`);
+    shuttingDown = true; // readiness now returns 503 so traffic drains away
 
     server.close(async () => {
       logger.info("HTTP server closed, no longer accepting connections");
