@@ -2,48 +2,123 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
-    branches: [main]
+    branches: [main, develop]
+
+# A newer push to the same branch/PR makes the older run pointless.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Least privilege: CI only needs to read the repository.
+permissions:
+  contents: read
+
+# Dummy values for config validation. They match the service containers below.
+# These are not secrets; real secrets never belong in this file.
+env:
+  NODE_ENV: test
+  POSTGRES_USER: test
+  POSTGRES_PASSWORD: test
+  POSTGRES_DB: test
+  POSTGRES_PORT: 5432
+  POSTGRES_HOST: localhost
+  REDIS_PORT: 6379
+  REDIS_HOST: localhost
+  MINIO_ROOT_USER: test
+  MINIO_ROOT_PASSWORD: testtesttest
+  MINIO_PORT: 9000
+  MINIO_HOST: localhost
 
 jobs:
-  lint-and-test:
+  # Fast static checks: does the code compile, type-check (tests included) and lint?
+  quality:
+    name: Lint, typecheck, build
     runs-on: ubuntu-latest
-
+    timeout-minutes: 10
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Install Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: "pnpm"
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
 
       - name: Lint
         run: pnpm --filter @atlas/api lint
 
+      # tsconfig.json excludes tests from the build, and vitest does not type-check,
+      # so without this step test files are never checked by the compiler.
+      - name: Typecheck (source and tests)
+        run: pnpm --filter @atlas/api typecheck
+
       - name: Build
         run: pnpm --filter @atlas/api build
 
-      - name: Test
+      # Catches a broken docker-compose.yml (bad interpolation, typos) before anyone runs it.
+      - name: Validate docker-compose.yml
+        run: cp .env.example .env && docker compose config --quiet
+
+  # Pure unit tests: no external services, so they are fast and cannot flake on infrastructure.
+  unit:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+
+      - name: Unit tests
         run: pnpm --filter @atlas/api test
+
+  # Runs the real migrations and real queries against Postgres (with pgvector) and Redis.
+  # This is the only place that proves the schema, constraints, seed and health checks work.
+  integration:
+    name: Integration tests (Postgres + Redis)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
         env:
-          NODE_ENV: test
           POSTGRES_USER: test
           POSTGRES_PASSWORD: test
           POSTGRES_DB: test
-          POSTGRES_PORT: 5432
-          POSTGRES_HOST: localhost
-          REDIS_PORT: 6379
-          REDIS_HOST: localhost
-          MINIO_ROOT_USER: test
-          MINIO_ROOT_PASSWORD: testtesttest
-          MINIO_PORT: 9000
-          MINIO_HOST: localhost
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U test -d test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+
+      # From an empty database, exactly like a new developer or a fresh deploy.
+      - name: Apply migrations
+        run: pnpm --filter @atlas/api db:migrate
+
+      # Running the seed twice proves it is idempotent.
+      - name: Seed (twice)
+        run: |
+          pnpm --filter @atlas/api db:seed
+          pnpm --filter @atlas/api db:seed
+
+      # Fails if someone changed the Drizzle schema without committing a migration:
+      # generate would then produce a new file and the working tree would be dirty.
+      - name: Check schema matches migrations (no drift)
+        run: |
+          pnpm --filter @atlas/api db:generate
+          test -z "$(git status --porcelain)" || { echo "Schema changed without a migration:"; git status --porcelain; git diff; exit 1; }
+
+      - name: Integration tests
+        run: pnpm --filter @atlas/api test:integration

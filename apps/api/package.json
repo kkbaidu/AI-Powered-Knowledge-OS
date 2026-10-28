@@ -4,16 +4,18 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "tsx watch --env-file=../../.env src/server.ts",
+    "dev": "tsx watch --env-file-if-exists=../../.env src/server.ts",
     "build": "tsc",
-    "start": "node --env-file=../../.env dist/server.js",
+    "start": "node --env-file-if-exists=../../.env dist/server.js",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
     "lint": "eslint src --max-warnings=0",
+    "typecheck": "tsc --noEmit -p tsconfig.test.json",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
-    "db:seed": "tsx --env-file=../../.env src/db/seed.ts"
+    "db:seed": "tsx --env-file-if-exists=../../.env src/db/seed.ts"
   },
   "keywords": [],
   "author": "",
