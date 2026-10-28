@@ -52,11 +52,13 @@ export function errorHandler(
 
   // 5xx and non-operational errors are our fault (error); 4xx are the client's (warn).
   // Log the original cause so the stack of the real failure is not lost.
+  // req.log is bound to this request's ID; fall back for requests that never reached httpLogger.
+  const log = req.log ?? logger;
   const logFields = { err: appError.cause ?? appError, code: appError.code, reqId: req.id };
   if (appError.statusCode >= 500 || !expose) {
-    logger.error(logFields, "Request failed");
+    log.error(logFields, "Request failed");
   } else {
-    logger.warn(logFields, "Request failed");
+    log.warn(logFields, "Request failed");
   }
 
   res.status(appError.statusCode).json({
