@@ -1,4 +1,4 @@
-import type { CookieOptions, Response } from "express";
+import type { CookieOptions, Request, Response } from "express";
 import type { Config } from "../config.js";
 
 export const REFRESH_COOKIE_NAME = "refresh_token";
@@ -36,4 +36,24 @@ export function clearRefreshCookie(
   settings: Pick<CookieSettings, "secureCookies">,
 ): void {
   res.clearCookie(REFRESH_COOKIE_NAME, baseOptions(settings));
+}
+
+// Express 5 sets cookies but does not parse them. One cookie is all we read, so a tiny
+// parser is cheaper than a dependency. Returns undefined if absent or unreadable.
+export function readCookie(req: Request, name: string): string | undefined {
+  const header = req.headers.cookie;
+  if (!header) return undefined;
+
+  for (const part of header.split(";")) {
+    const eq = part.indexOf("=");
+    if (eq === -1) continue;
+    if (part.slice(0, eq).trim() !== name) continue;
+    const raw = part.slice(eq + 1).trim();
+    try {
+      return decodeURIComponent(raw) || undefined;
+    } catch {
+      return undefined; // malformed %-escape: treat as missing, never throw
+    }
+  }
+  return undefined;
 }

@@ -5,5 +5,6 @@ export const testAuthConfig: Config["auth"] = Object.freeze({
   accessTokenSecret: "test-only-secret-that-is-at-least-32-characters",
   accessTokenTtlSeconds: 900,
   refreshTokenTtlSeconds: 2_592_000,
+  refreshReuseGraceSeconds: 10,
   secureCookies: false,
 });

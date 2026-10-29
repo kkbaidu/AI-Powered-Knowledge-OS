@@ -225,15 +225,20 @@ sequenceDiagram
     A-->>C: 401 Unauthorized
 
     C->>A: POST /auth/refresh (cookie: refresh_token)
-    A->>DB: hash token, look up session
-    alt token matches current hash
-        DB-->>A: session valid
-        A->>DB: rotate: store new hash, keep previous hash
-        A-->>C: new access_token + new refresh_token
-    else token matches a PREVIOUS (already-rotated) hash
-        DB-->>A: reuse detected
-        A->>DB: revoke entire session
-        A-->>C: 401 — force re-login
+    A->>DB: hash token, atomic UPDATE ... WHERE refresh_token_hash = hash<br/>AND NOT revoked AND not expired (rotate in one statement)
+    alt a row was updated (token was the current one)
+        DB-->>A: session with new hash, old hash moved to previous_token_hash
+        A-->>C: new access_token + new refresh_token (cookie re-issued)
+    else no row updated
+        A->>DB: find session by previous_token_hash
+        alt not found, or session revoked or expired
+            A-->>C: 401 INVALID_REFRESH_TOKEN (cookie cleared)
+        else rotated less than the grace period ago (two tabs, retry)
+            A-->>C: 401 REFRESH_TOKEN_ROTATED (session kept, retry with the new cookie)
+        else rotated longer ago: reuse, assume theft
+            A->>DB: revoke entire session
+            A-->>C: 401 REFRESH_TOKEN_REUSED (cookie cleared, force re-login)
+        end
     end
 ```
 

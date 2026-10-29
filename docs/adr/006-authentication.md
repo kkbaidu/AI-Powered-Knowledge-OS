@@ -46,7 +46,22 @@ the auth middleware. Each step appends its decisions here.
 | Rehash | Weaker stored hashes are upgraded after a successful login | The plaintext exists only at that moment. |
 | Dependency injection | `createApp` takes `auth` settings instead of importing config | Tests build apps with their own settings and importing config has side effects (it can exit the process). |
 
+## Refresh (rotation and reuse detection)
+
+| Area | Decision | Why |
+|---|---|---|
+| Rotation | One atomic `UPDATE sessions SET previous_token_hash = refresh_token_hash, refresh_token_hash = $new ... WHERE refresh_token_hash = $old AND NOT revoked AND expires_at > now() RETURNING` | Two requests with the same token race for the row lock. The loser re-checks the `WHERE` against the updated row and gets zero rows, so exactly one can rotate. SELECT-then-UPDATE would let both pass. Tested with 6 parallel requests: one 200, five rejected. |
+| Reuse | Presented token equals `previous_token_hash` and the rotation is older than the grace period: revoke the whole session (401 `REFRESH_TOKEN_REUSED`) | The holder of the old token is the thief or the user and we cannot tell which. Revoking kills the newest token the other party holds and forces a login only the real user can complete. Other sessions of the user are untouched. |
+| Grace period | `REFRESH_REUSE_GRACE_SECONDS` (default 10). Inside it: 401 `REFRESH_TOKEN_ROTATED`, session kept, nothing issued. | Two tabs refreshing at once, or a retry after a lost response, are not theft. Without a grace period the race above logs legitimate users out (tested). Cost: a replay inside the window is not detected as theft, but it gains the thief nothing since no token is issued. 0 disables it. |
+| Rotation time | `last_used_at` doubles as "when this token was last rotated" | No migration needed. It must not be updated by anything else, or grace checks drift. A dedicated `rotated_at` is cleaner if that changes. |
+| Expiry | Sliding: every rotation sets `expires_at` to now plus the refresh TTL, and the cookie is re-issued | Active users stay signed in. Absolute lifetime cap is a follow-up. |
+| Account status | Checked after rotation. A suspended user loses the session (403). | Rotation is the atomic claim; the status check cannot race it. |
+| Cookie on failure | A 401 or 403 clears the cookie; a 5xx does not | A dead token should be dropped. A database blip must not log everyone out. |
+| Token source | Cookie only (a 40-line parser, no dependency). The body and the `Authorization` header are ignored (tested). | Keeps the token out of anything that gets logged or cached, and keeps `SameSite=Strict` meaningful. |
+| Logging | Reuse is logged at `warn` with user and session ids, never the token | Theft signals need to be visible to operators. |
+
 ## Known limitations / follow-ups
+- Only one previous hash is stored. A token two rotations old matches nothing: it is rejected but the session is not revoked (tested and documented). Fix: a `session_token_history` table, or a token family id.
 - No rate limiting yet. Login is the main brute-force target and register an enumeration target. Needs a Redis-backed limiter per IP and per email.
 - `req.ip` is the socket address. Behind a load balancer it is the proxy's address until `trust proxy` is configured.
 - No per-user session cap and no cleanup job for expired sessions yet.

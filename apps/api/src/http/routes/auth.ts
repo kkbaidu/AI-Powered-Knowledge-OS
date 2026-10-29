@@ -2,8 +2,9 @@ import { Router } from "express";
 import type { Config } from "../../config.js";
 import type { Database } from "../../db/client.js";
 import { loginBody, registerBody } from "../../auth/auth.schemas.js";
-import { loginUser, registerUser } from "../../auth/auth.service.js";
-import { setRefreshCookie } from "../../auth/cookies.js";
+import { loginUser, refreshSession, registerUser } from "../../auth/auth.service.js";
+import { clearRefreshCookie, readCookie, REFRESH_COOKIE_NAME, setRefreshCookie } from "../../auth/cookies.js";
+import { AppError, AuthError } from "../../types/errors.js";
 import { validate, type Validated } from "../middleware/validate.js";
 
 export interface AuthRouterDeps {
@@ -43,6 +44,32 @@ export function authRouter({ db, auth }: AuthRouterDeps): Router {
       success: true,
       data: { user: result.user, accessToken: result.accessToken, expiresIn: result.expiresIn },
     });
+  });
+
+  // No body: the refresh token travels in the cookie. SameSite=Strict keeps other sites
+  // from triggering this call with the user's cookie (see cookies.ts).
+  router.post("/refresh", async (req, res) => {
+    const token = readCookie(req, REFRESH_COOKIE_NAME);
+    if (!token) {
+      throw new AuthError("Refresh token missing", "REFRESH_TOKEN_MISSING");
+    }
+
+    try {
+      const result = await refreshSession(db, token, auth);
+      setRefreshCookie(res, result.refreshToken, auth);
+      res.status(200).json({
+        success: true,
+        data: { user: result.user, accessToken: result.accessToken, expiresIn: result.expiresIn },
+      });
+    } catch (err) {
+      // A 401/403 means this cookie is dead (or the session was just revoked): tell the
+      // browser to drop it. A 5xx is OUR fault (say, the DB blipped), and must not log
+      // the user out, so the cookie is kept and the client can retry.
+      if (err instanceof AppError && (err.statusCode === 401 || err.statusCode === 403)) {
+        clearRefreshCookie(res, auth);
+      }
+      throw err;
+    }
   });
 
   return router;

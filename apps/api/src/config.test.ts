@@ -69,6 +69,15 @@ describe("parseConfig: auth", () => {
     expect(cfg.auth.accessTokenSecret).toBe(validEnv.JWT_ACCESS_SECRET);
   });
 
+  it("defaults the refresh reuse grace period to 10 seconds and allows 0 to disable it", () => {
+    expect(parseConfig(validEnv).auth.refreshReuseGraceSeconds).toBe(10);
+    expect(
+      parseConfig({ ...validEnv, REFRESH_REUSE_GRACE_SECONDS: "0" }).auth.refreshReuseGraceSeconds,
+    ).toBe(0);
+    expect(() => parseConfig({ ...validEnv, REFRESH_REUSE_GRACE_SECONDS: "-1" })).toThrow(ConfigError);
+    expect(() => parseConfig({ ...validEnv, REFRESH_REUSE_GRACE_SECONDS: "2.5" })).toThrow(ConfigError);
+  });
+
   it("only marks cookies Secure in production", () => {
     expect(parseConfig(validEnv).auth.secureCookies).toBe(false);
     expect(parseConfig({ ...validEnv, NODE_ENV: "test" }).auth.secureCookies).toBe(false);
