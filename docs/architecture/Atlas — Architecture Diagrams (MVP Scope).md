@@ -284,16 +284,16 @@ Every error response, from any stage, has the same shape:
 { "success": false, "error": { "code": "DOCUMENT_NOT_FOUND", "message": "Document does not exist", "details": [] } }
 ```
 
-`details` appears only for validation errors. Status codes: 401 `AUTH_ERROR`, 403 `PERMISSION_ERROR`, 404 `RESOURCE_NOT_FOUND` / `ROUTE_NOT_FOUND`, 409 `BUSINESS_RULE_ERROR`, 413 `PAYLOAD_TOO_LARGE`, 422 `VALIDATION_ERROR` / `MALFORMED_JSON`, 500 `INTERNAL_ERROR`, 502 `AI_PROVIDER_ERROR`.
+`details` appears only for validation errors. Status codes: 401 `AUTH_ERROR`, 403 `PERMISSION_ERROR`, 404 `RESOURCE_NOT_FOUND` / `ROUTE_NOT_FOUND`, 409 `BUSINESS_RULE_ERROR`, 413 `PAYLOAD_TOO_LARGE`, 429 `RATE_LIMITED` (with `Retry-After`), 422 `VALIDATION_ERROR` / `MALFORMED_JSON`, 500 `INTERNAL_ERROR`, 502 `AI_PROVIDER_ERROR`.
 
-### 4b. Planned: full chain once auth and RBAC land
+### 4b. Full chain: rate limiting and auth built, RBAC planned
 
 ```mermaid
 flowchart LR
     Req[Incoming Request] --> ReqId[Request ID]
     ReqId --> Log[Structured Logger]
-    Log --> RateLimit["Rate Limiter<br/>(planned)"]
-    RateLimit --> AuthMW["Auth Middleware<br/>verify JWT (planned)"]
+    Log --> RateLimit["Rate Limiter<br/>(Redis sliding window)"]
+    RateLimit --> AuthMW["Auth Middleware<br/>Bearer JWT, optional session check"]
     AuthMW --> OrgMW["Org Membership Check<br/>(planned)"]
     OrgMW --> WsMW["Workspace Permission Check<br/>(planned)"]
     WsMW --> Validate[Zod Validation]
@@ -306,9 +306,11 @@ flowchart LR
 
     classDef built fill:#e6f4ea,stroke:#2e7d32,color:#111;
     classDef planned fill:#fff8e1,stroke:#f9a825,stroke-dasharray: 4 3,color:#111;
-    class ReqId,Log,Validate,ErrorHandler,Repo,DB built;
-    class RateLimit,AuthMW,OrgMW,WsMW,Service,Controller planned;
+    class ReqId,Log,Validate,ErrorHandler,Repo,DB,RateLimit,AuthMW built;
+    class OrgMW,WsMW,Service,Controller planned;
 ```
+
+Today these are mounted per route, not globally. `/auth/register` and `/auth/login` run validation first (the per-account limit is keyed on the normalised email) and the rate limiter second, before any password hashing. Protected routes mount `requireAuth`, optionally with `checkSession` for instant revocation. A single global order comes when more modules exist.
 
 ---
 
