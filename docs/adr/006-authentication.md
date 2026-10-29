@@ -29,7 +29,26 @@ the auth middleware. Each step appends its decisions here.
 | Mass assignment | Zod strips unknown keys; the insert lists fields explicitly | A client can never set `status` or `id`. |
 | Output | `PublicUser` type omits `passwordHash` | A handler cannot serialise the hash by accident. |
 
+## Login
+
+| Area | Decision | Why |
+|---|---|---|
+| Credential errors | One response (401 `INVALID_CREDENTIALS`) for unknown email, wrong password and OAuth-only accounts | The caller cannot tell which it was. Tested: the two bodies are identical. |
+| Timing | `verifyPassword` always runs, against a dummy hash when the user does not exist | An unknown email would otherwise return in microseconds instead of ~50ms. |
+| Account status | Suspended and unverified users get 403, but only after the password is correct | The status is shown only to someone who proved they own the account. A wrong password on a suspended account still returns 401. |
+| Email lookup | `lower(email) = $1` | The only form that can use the `lower(email)` unique index (ADR-002). |
+| Access token | HS256 JWT with `sub`, `sid`, `iss`, `aud`, `iat`, `exp`. Algorithm, issuer, audience and required claims are pinned on verify. | Pinning blocks alg-confusion and `alg: none`. No email or roles in the token: it is readable by anyone and stale for up to 15 minutes. |
+| Expiry signalling | `ACCESS_TOKEN_EXPIRED` vs `INVALID_ACCESS_TOKEN` | The client refreshes on the first and re-authenticates on the second. |
+| Token delivery | Access token in the JSON body (held in memory); refresh token only in an HttpOnly cookie | XSS cannot read the refresh token. Not in `localStorage`, which any injected script can read. |
+| Cookie | `HttpOnly`, `SameSite=Strict`, `Path=/api/v1/auth`, `Secure` in production, `Max-Age` = refresh TTL | Strict is the CSRF defence for `/auth/refresh`. The path keeps the cookie off every other request. If the web app ever lives on a different registrable domain than the API, Strict stops working and a CSRF token is needed. |
+| Caching | `Cache-Control: no-store` on every auth response | Responses carry tokens. |
+| Session row | One row per login (multi-device). Stores the token hash, a user-agent (max 255) and the IP (only if it parses as an IP). | `previous_token_hash` stays null until the first rotation. |
+| Rehash | Weaker stored hashes are upgraded after a successful login | The plaintext exists only at that moment. |
+| Dependency injection | `createApp` takes `auth` settings instead of importing config | Tests build apps with their own settings and importing config has side effects (it can exit the process). |
+
 ## Known limitations / follow-ups
-- No rate limiting yet (login and register are brute-force and enumeration targets).
+- No rate limiting yet. Login is the main brute-force target and register an enumeration target. Needs a Redis-backed limiter per IP and per email.
+- `req.ip` is the socket address. Behind a load balancer it is the proxy's address until `trust proxy` is configured.
+- No per-user session cap and no cleanup job for expired sessions yet.
 - No breached-password check.
 - Hash-then-insert means a duplicate registration still pays the hashing cost; that is intentional, it keeps timings similar.

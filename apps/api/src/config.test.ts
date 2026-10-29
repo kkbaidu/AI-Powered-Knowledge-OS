@@ -69,6 +69,12 @@ describe("parseConfig: auth", () => {
     expect(cfg.auth.accessTokenSecret).toBe(validEnv.JWT_ACCESS_SECRET);
   });
 
+  it("only marks cookies Secure in production", () => {
+    expect(parseConfig(validEnv).auth.secureCookies).toBe(false);
+    expect(parseConfig({ ...validEnv, NODE_ENV: "test" }).auth.secureCookies).toBe(false);
+    expect(parseConfig({ ...validEnv, NODE_ENV: "production" }).auth.secureCookies).toBe(true);
+  });
+
   it("coerces TTL overrides to numbers", () => {
     const cfg = parseConfig({
       ...validEnv,
