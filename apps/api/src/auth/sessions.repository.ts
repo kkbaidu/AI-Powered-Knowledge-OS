@@ -1,6 +1,6 @@
 import { and, eq, gt, or, sql } from "drizzle-orm";
 import type { DbExecutor } from "../db/client.js";
-import { sessions } from "../db/schema/index.js";
+import { sessions, users } from "../db/schema/index.js";
 
 export type Session = typeof sessions.$inferSelect;
 export type NewSession = Pick<
@@ -85,4 +85,45 @@ export async function revokeSessionByTokenHash(
     )
     .returning({ id: sessions.id });
   return row?.id ?? null;
+}
+
+export interface SessionForAuth {
+  userId: string;
+  revoked: boolean;
+  expiresAt: Date;
+  userStatus: (typeof users.$inferSelect)["status"];
+}
+
+// One indexed lookup (sessions PK, users PK) used by requireAuth when a route wants
+// instant revocation instead of trusting the JWT alone.
+export async function findSessionForAuth(
+  executor: DbExecutor,
+  sessionId: string,
+): Promise<SessionForAuth | null> {
+  const [row] = await executor
+    .select({
+      userId: sessions.userId,
+      revoked: sessions.revoked,
+      expiresAt: sessions.expiresAt,
+      userStatus: users.status,
+    })
+    .from(sessions)
+    .innerJoin(users, eq(users.id, sessions.userId))
+    .where(eq(sessions.id, sessionId))
+    .limit(1);
+  return row ?? null;
+}
+
+// "Log out everywhere": one statement ends every live session of the user (uses
+// sessions_user_id_idx). Returns how many were ended.
+export async function revokeAllUserSessions(
+  executor: DbExecutor,
+  userId: string,
+): Promise<number> {
+  const rows = await executor
+    .update(sessions)
+    .set({ revoked: true })
+    .where(and(eq(sessions.userId, userId), eq(sessions.revoked, false)))
+    .returning({ id: sessions.id });
+  return rows.length;
 }

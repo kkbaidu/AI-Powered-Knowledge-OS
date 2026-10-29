@@ -9,6 +9,7 @@ import { logger } from "../logger.js";
 import {
   findSessionByPreviousHash,
   insertSession,
+  revokeAllUserSessions,
   revokeSession,
   revokeSessionByTokenHash,
   rotateSession,
@@ -243,4 +244,21 @@ export async function logoutSession(
 ): Promise<string | null> {
   if (!presentedToken) return null;
   return revokeSessionByTokenHash(db, hashRefreshToken(presentedToken));
+}
+
+// Ends every session of the user, on every device. Returns how many were live.
+export function logoutEverywhere(db: DbExecutor, userId: string): Promise<number> {
+  return revokeAllUserSessions(db, userId);
+}
+
+// The current user for GET /auth/me. Reads the database (so profile changes show up at
+// once) and enforces status, which the stateless token check alone cannot.
+export async function getCurrentUser(db: DbExecutor, userId: string): Promise<PublicUser> {
+  const user = await findUserById(db, userId);
+  // A valid token for a user that no longer exists (deleted since login).
+  if (!user) throw new AuthError("Session is no longer valid", "SESSION_REVOKED");
+  if (user.status !== "active") {
+    throw new PermissionError("This account is not active", "ACCOUNT_SUSPENDED");
+  }
+  return toPublicUser(user);
 }

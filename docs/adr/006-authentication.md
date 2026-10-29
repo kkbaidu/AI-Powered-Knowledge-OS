@@ -71,9 +71,23 @@ the auth middleware. Each step appends its decisions here.
 | Access token | Not invalidated. It stays valid until it expires (at most 15 minutes). A test documents this. | Verifying it never reads the database, which is the reason to use a JWT at all. Instant revocation needs a per-request session lookup; see the middleware decision. |
 | CSRF | No extra token | `SameSite=Strict` stops cross-site requests from carrying the cookie, and a forged logout only signs the user out. |
 
+## Auth middleware, `/auth/me`, log out everywhere
+
+| Area | Decision | Why |
+|---|---|---|
+| Token source | `Authorization: Bearer` header only. Never the query string, never a cookie. | URLs leak into logs, history and `Referer`. Cookies are attached automatically by browsers, which would reopen CSRF on every API route. Tested. |
+| Two modes | `requireAuth(deps)` trusts the signed token. `requireAuth(deps, { checkSession: true })` also reads the session and user. | The real trade-off. Stateless: no database read, but a revoked or suspended user keeps access for up to 15 minutes. Strict: one indexed read per request buys instant revocation. Default to stateless and opt in where staleness is unacceptable. |
+| Where strict is used | `/auth/logout-all` now. Account changes, billing and admin routes later. | A destructive account-level action should not be callable with a token from an ended session. |
+| Strict checks | Session exists, belongs to the token's `sub`, not revoked, not expired, and the user is `active` | The `sub`/`sid` binding is enforced even though a token cannot be forged without the secret. Missing, revoked and expired all give the same `SESSION_REVOKED`. |
+| Error contract | `AUTH_REQUIRED` (nothing usable sent), `ACCESS_TOKEN_EXPIRED` (refresh and retry), `INVALID_ACCESS_TOKEN` and `SESSION_REVOKED` (log in again), `ACCOUNT_SUSPENDED` (403) | Clients can branch on the code. RFC 6750 `WWW-Authenticate: Bearer` challenge on every 401. |
+| Caller identity | `res.locals.auth`, read through `getAuth(res)` | Same pattern as `res.locals.validated`. `getAuth` throws a 500 if a route forgot the middleware, so a missing guard is a loud bug rather than an anonymous caller. |
+| `/auth/me` | Stateless token check, then reads the user and refuses non-active accounts | The handler reads the database anyway, so status is enforced for free. |
+| `/auth/logout-all` | One `UPDATE ... WHERE user_id = $1 AND NOT revoked`, returns the count, clears the cookie | Single statement, uses `sessions_user_id_idx`. |
+
 ## Known limitations / follow-ups
 - Only one previous hash is stored. A token two rotations old matches nothing: it is rejected but the session is not revoked (tested and documented). Fix: a `session_token_history` table, or a token family id.
 - No rate limiting yet. Login is the main brute-force target and register an enumeration target. Needs a Redis-backed limiter per IP and per email.
+- No endpoint lists a user's sessions (devices) yet, and nothing revokes a single other session by id.
 - `req.ip` is the socket address. Behind a load balancer it is the proxy's address until `trust proxy` is configured.
 - No per-user session cap and no cleanup job for expired sessions yet.
 - No breached-password check.
