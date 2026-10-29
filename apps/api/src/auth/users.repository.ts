@@ -38,3 +38,8 @@ export async function updatePasswordHash(
 ): Promise<void> {
   await executor.update(users).set({ passwordHash }).where(eq(users.id, userId));
 }
+
+export async function findUserById(executor: DbExecutor, id: string): Promise<User | null> {
+  const [row] = await executor.select().from(users).where(eq(users.id, id)).limit(1);
+  return row ?? null;
+}

@@ -5,10 +5,17 @@ import { AuthError, BusinessRuleError, PermissionError } from "../types/errors.j
 import { signAccessToken } from "./accessTokens.js";
 import type { LoginInput, RegisterInput } from "./auth.schemas.js";
 import { hashPassword, needsRehash, verifyPassword } from "./passwords.js";
-import { insertSession } from "./sessions.repository.js";
+import { logger } from "../logger.js";
+import {
+  findSessionByPreviousHash,
+  insertSession,
+  revokeSession,
+  rotateSession,
+} from "./sessions.repository.js";
 import { generateRefreshToken, hashRefreshToken } from "./tokens.js";
 import {
   findUserByEmail,
+  findUserById,
   insertUserIfEmailFree,
   updatePasswordHash,
   type User,
@@ -132,4 +139,91 @@ export async function loginUser(
     refreshToken,
     expiresIn: settings.accessTokenTtlSeconds,
   };
+}
+
+// Same shape as a login: a new access token and a new refresh token for the same session.
+export type RefreshResult = LoginResult;
+
+// Rotation with reuse detection (diagram 3 in docs/architecture).
+//
+//   presented token == session's CURRENT hash   -> rotate: issue a new pair
+//   presented token == session's PREVIOUS hash  -> it was already used:
+//        just rotated (< grace)  -> reject, keep the session (two tabs, a retry)
+//        rotated longer ago      -> assume theft: revoke the whole session
+//   anything else                               -> reject
+//
+// Why revoking the session is right: whoever holds the old token is either the thief or
+// the real user, and we cannot tell which. Killing the session forces a fresh login (the
+// real user has the password, the thief does not) and invalidates the newest token the
+// other party is holding. Known limit: only ONE previous hash is stored, so a token two
+// rotations old matches nothing and is rejected without a revoke.
+export async function refreshSession(
+  db: DbExecutor,
+  presentedToken: string,
+  settings: Config["auth"],
+): Promise<RefreshResult> {
+  const presentedHash = hashRefreshToken(presentedToken);
+  const newToken = generateRefreshToken();
+  const now = new Date();
+
+  const session = await rotateSession(db, {
+    currentHash: presentedHash,
+    newHash: hashRefreshToken(newToken),
+    now,
+    // Sliding expiry: an active session keeps living; one idle for the full TTL dies.
+    expiresAt: new Date(now.getTime() + settings.refreshTokenTtlSeconds * 1000),
+  });
+
+  if (!session) {
+    await rejectUnrotatableToken(db, presentedHash, now, settings);
+    // rejectUnrotatableToken always throws; this satisfies the type checker.
+    throw new AuthError("Invalid refresh token", "INVALID_REFRESH_TOKEN");
+  }
+
+  // The session is valid, but the account may have been suspended since login.
+  // Checked after rotation (rotation is the atomic claim); a blocked user loses the session.
+  const user = await findUserById(db, session.userId);
+  if (!user || user.status !== "active") {
+    await revokeSession(db, session.id);
+    throw new PermissionError("This account is not active", "ACCOUNT_SUSPENDED");
+  }
+
+  return {
+    user: toPublicUser(user),
+    accessToken: await signAccessToken({ userId: user.id, sessionId: session.id }, settings),
+    refreshToken: newToken,
+    expiresIn: settings.accessTokenTtlSeconds,
+  };
+}
+
+async function rejectUnrotatableToken(
+  db: DbExecutor,
+  presentedHash: string,
+  now: Date,
+  settings: Config["auth"],
+): Promise<never> {
+  const replayed = await findSessionByPreviousHash(db, presentedHash);
+
+  // Unknown token, or its session is already revoked or expired: nothing to protect.
+  if (!replayed || replayed.revoked || replayed.expiresAt <= now) {
+    throw new AuthError("Invalid refresh token", "INVALID_REFRESH_TOKEN");
+  }
+
+  // last_used_at is set on every rotation, so it is when this token was replaced.
+  const rotatedAt = replayed.lastUsedAt ?? replayed.createdAt;
+  const ageSeconds = (now.getTime() - rotatedAt.getTime()) / 1000;
+
+  if (ageSeconds < settings.refreshReuseGraceSeconds) {
+    // Almost certainly a concurrent request or a retry. The real user's browser already
+    // holds the new cookie, so a retry succeeds. We do not revoke, and we hand out
+    // nothing, so a thief replaying inside the window gains nothing.
+    throw new AuthError("Refresh token was just rotated, retry", "REFRESH_TOKEN_ROTATED");
+  }
+
+  await revokeSession(db, replayed.id);
+  logger.warn(
+    { userId: replayed.userId, sessionId: replayed.id, ageSeconds: Math.round(ageSeconds) },
+    "Refresh token reuse detected, session revoked",
+  );
+  throw new AuthError("Refresh token reuse detected", "REFRESH_TOKEN_REUSED");
 }

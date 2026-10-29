@@ -25,6 +25,10 @@ const envSchema = z.object({
   // (verified without a DB hit); refresh tokens are long because they are revocable.
   ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().positive().default(15 * 60),
   REFRESH_TOKEN_TTL_SECONDS: z.coerce.number().int().positive().default(30 * 24 * 60 * 60),
+  // After a refresh token is rotated, presenting the OLD one within this many seconds is
+  // treated as a benign race (two tabs, a retry) and rejected without revoking the
+  // session. Later than that it is treated as theft. 0 disables the grace period.
+  REFRESH_REUSE_GRACE_SECONDS: z.coerce.number().int().nonnegative().default(10),
 }).refine((e) => e.REFRESH_TOKEN_TTL_SECONDS > e.ACCESS_TOKEN_TTL_SECONDS, {
   path: ["REFRESH_TOKEN_TTL_SECONDS"],
   message: "must be longer than ACCESS_TOKEN_TTL_SECONDS",
@@ -78,6 +82,7 @@ export function parseConfig(env: NodeJS.ProcessEnv) {
       accessTokenSecret: e.JWT_ACCESS_SECRET,
       accessTokenTtlSeconds: e.ACCESS_TOKEN_TTL_SECONDS,
       refreshTokenTtlSeconds: e.REFRESH_TOKEN_TTL_SECONDS,
+      refreshReuseGraceSeconds: e.REFRESH_REUSE_GRACE_SECONDS,
       // Secure cookies are only sent over HTTPS, so they are off outside production
       // (local development runs on plain http://localhost).
       secureCookies: e.NODE_ENV === "production",
