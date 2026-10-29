@@ -2,9 +2,17 @@ import { Router } from "express";
 import type { Config } from "../../config.js";
 import type { Database } from "../../db/client.js";
 import { loginBody, registerBody } from "../../auth/auth.schemas.js";
-import { loginUser, logoutSession, refreshSession, registerUser } from "../../auth/auth.service.js";
+import {
+  getCurrentUser,
+  loginUser,
+  logoutEverywhere,
+  logoutSession,
+  refreshSession,
+  registerUser,
+} from "../../auth/auth.service.js";
 import { clearRefreshCookie, readCookie, REFRESH_COOKIE_NAME, setRefreshCookie } from "../../auth/cookies.js";
 import { AppError, AuthError } from "../../types/errors.js";
+import { getAuth, requireAuth } from "../middleware/requireAuth.js";
 import { validate, type Validated } from "../middleware/validate.js";
 
 export interface AuthRouterDeps {
@@ -79,6 +87,21 @@ export function authRouter({ db, auth }: AuthRouterDeps): Router {
     if (sessionId) req.log.info({ sessionId }, "Session logged out");
     clearRefreshCookie(res, auth);
     res.status(204).end();
+  });
+
+  // The caller, as the database sees them now. Stateless token check; the handler itself
+  // reads the user, so a suspended account is refused here too.
+  router.get("/me", requireAuth({ auth, db }), async (_req, res) => {
+    const user = await getCurrentUser(db, getAuth(res).userId);
+    res.status(200).json({ success: true, data: { user } });
+  });
+
+  // Revokes every session of the signed-in user. A destructive account-level action, so
+  // it uses the strict check: a token from an already-ended session cannot call it.
+  router.post("/logout-all", requireAuth({ auth, db }, { checkSession: true }), async (_req, res) => {
+    const revokedSessions = await logoutEverywhere(db, getAuth(res).userId);
+    clearRefreshCookie(res, auth);
+    res.status(200).json({ success: true, data: { revokedSessions } });
   });
 
   return router;
