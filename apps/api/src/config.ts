@@ -18,6 +18,12 @@ const envSchema = z.object({
   MINIO_PORT: z.coerce.number().int().positive(),
   MINIO_HOST: z.string().default("localhost"),
 
+  // How many reverse proxies / load balancers sit in front of the API. Controls which
+  // X-Forwarded-For entry is believed as the client IP (rate limiting depends on it).
+  // 0 = none: the header is ignored, so clients cannot spoof their IP. Set it to the real
+  // hop count in production, otherwise every client appears to share the proxy's address.
+  TRUST_PROXY_HOPS: z.coerce.number().int().nonnegative().default(0),
+
   // No default on purpose: a built-in secret would be a known secret. HS256 needs a
   // key at least as long as the hash output (32 bytes) to be as strong as it claims.
   JWT_ACCESS_SECRET: z.string().min(32, "must be at least 32 characters"),
@@ -57,6 +63,7 @@ export function parseConfig(env: NodeJS.ProcessEnv) {
     env: e.NODE_ENV,
     port: e.PORT,
     isProduction: e.NODE_ENV === "production",
+    trustProxyHops: e.TRUST_PROXY_HOPS,
 
     postgres: Object.freeze({
       host: e.POSTGRES_HOST,

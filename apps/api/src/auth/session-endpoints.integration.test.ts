@@ -9,13 +9,14 @@ import { createDb } from "../db/client.js";
 import { sessions, users } from "../db/schema/index.js";
 import { assertDatabaseReady, unique } from "../test/integration.js";
 import { testAuthConfig } from "../test/auth.js";
+import { noopRateLimiter } from "../test/rateLimiter.js";
 import { hashPassword } from "./passwords.js";
 import { hashRefreshToken } from "./tokens.js";
 
 const pool = createPostgresPool(config.postgres);
 const db = createDb(pool);
 const redis = { ping: async () => "PONG", on: () => undefined } as unknown as Redis;
-const app = createApp({ auth: testAuthConfig, pgPool: pool, redis });
+const app = createApp({ auth: testAuthConfig, rateLimiter: noopRateLimiter, pgPool: pool, redis });
 
 const PASSWORD = "correct-horse-battery";
 const createdUserIds: string[] = [];

@@ -84,11 +84,31 @@ the auth middleware. Each step appends its decisions here.
 | `/auth/me` | Stateless token check, then reads the user and refuses non-active accounts | The handler reads the database anyway, so status is enforced for free. |
 | `/auth/logout-all` | One `UPDATE ... WHERE user_id = $1 AND NOT revoked`, returns the count, clears the cookie | Single statement, uses `sessions_user_id_idx`. |
 
+## Rate limiting
+
+| Area | Decision | Why |
+|---|---|---|
+| Algorithm | Sliding window log: a Redis sorted set of request timestamps, one Lua script per check | A fixed-window counter (`INCR` + `EXPIRE`) allows 2x the limit across a window boundary, which matters for "5 password guesses". The log is exact, and its memory is bounded by the limit because only allowed requests are stored. For high-volume limits (thousands per window) use a sliding window counter or a token bucket instead. |
+| Atomicity | Check and count happen in one Lua script | Redis runs a script without interleaving other commands. 60 parallel requests against a limit of 10 let exactly 10 through (tested against real Redis). A `GET`-then-`INCR` sequence lets bursts slip under the limit. |
+| Time source | `TIME` inside Redis, not the API server | Several API instances with skewed clocks still agree on when a window ends. |
+| Blocked requests | Not recorded | Hammering a blocked key cannot extend its own lockout (tested). |
+| Login limits | 5 per 15 min per IP **and** email, cleared by a successful login; 30 per 15 min per IP | The per-pair limit is the brute-force brake. Keying it on both means a stranger can only throttle their own address for a victim's email, never lock the victim out (tested). The per-IP limit stops one address spraying many emails (credential stuffing) with room for an office NAT. Success clears only the pair budget, so a script cannot refund its per-IP budget by logging into an account it owns. |
+| Not shipped | A limit on the email alone | It would stop distributed attacks on one account, but any stranger could then lock anyone out. This is a product decision (CAPTCHA, step-up checks, alerts), not a default. |
+| Register limit | 10 per hour per IP | Slows mass account creation and email enumeration through the 409. |
+| Not limited | `/refresh`, `/logout`, `/me` | They need a 256-bit token or a signed JWT, so there is nothing to guess. |
+| Order | After validation, before any password work | A throttled caller costs one Redis call, not an Argon2 hash. Requests that fail validation do not consume budget. |
+| Redis outage | Fail **open**: allow the request and log at `error` | Failing closed turns a Redis outage into a login outage. The cost is no brute-force brake while Redis is down; Argon2 cost and alerting on that log line are the backstop. Tested. |
+| Client IP | `req.ip` with an explicit `TRUST_PROXY_HOPS` (default 0) | With 0 hops `X-Forwarded-For` is ignored, so it cannot be used to dodge a limit (tested). Behind a real proxy the hop count must be set, otherwise every user shares the proxy's address and one person's traffic limits everyone. IPv4-mapped IPv6 addresses are normalised into one bucket. |
+| Keys | `rl:<rule>:<ip>[:<sha256(email) prefix>]` | No raw email in Redis, bounded key length. |
+| Response | 429 `RATE_LIMITED` with `Retry-After` (seconds) | Standard header; `details.retryAfterSeconds` for clients that prefer the body. |
+| Injection | `createApp` takes a `RateLimiter` | Unit tests use an in-memory limiter with a movable clock and need no Redis. A no-op limiter keeps unrelated tests fast. |
+
 ## Known limitations / follow-ups
 - Only one previous hash is stored. A token two rotations old matches nothing: it is rejected but the session is not revoked (tested and documented). Fix: a `session_token_history` table, or a token family id.
-- No rate limiting yet. Login is the main brute-force target and register an enumeration target. Needs a Redis-backed limiter per IP and per email.
+- IPv6 clients are limited per full address. An attacker with a /64 can rotate addresses; limit by /64 prefix if that becomes a problem.
+- No limit on a single account across all addresses (see "Not shipped" above). A distributed attack on one account is throttled only by Argon2 cost.
+- No metrics yet on 429s or limiter failures; the `Rate limiter unavailable` log line should alert.
 - No endpoint lists a user's sessions (devices) yet, and nothing revokes a single other session by id.
-- `req.ip` is the socket address. Behind a load balancer it is the proxy's address until `trust proxy` is configured.
 - No per-user session cap and no cleanup job for expired sessions yet.
 - No breached-password check.
 - Hash-then-insert means a duplicate registration still pays the hashing cost; that is intentional, it keeps timings similar.

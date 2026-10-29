@@ -1,6 +1,8 @@
 import { Router } from "express";
 import type { Config } from "../../config.js";
 import type { Database } from "../../db/client.js";
+import type { RateLimiter } from "../../infra/rateLimiter.js";
+import { authRateLimitRules, DEFAULT_AUTH_RATE_LIMITS, type AuthRateLimits } from "../../auth/rateLimitPolicy.js";
 import { loginBody, registerBody } from "../../auth/auth.schemas.js";
 import {
   getCurrentUser,
@@ -12,16 +14,25 @@ import {
 } from "../../auth/auth.service.js";
 import { clearRefreshCookie, readCookie, REFRESH_COOKIE_NAME, setRefreshCookie } from "../../auth/cookies.js";
 import { AppError, AuthError } from "../../types/errors.js";
+import { rateLimit, resetRateLimit } from "../middleware/rateLimit.js";
 import { getAuth, requireAuth } from "../middleware/requireAuth.js";
 import { validate, type Validated } from "../middleware/validate.js";
 
 export interface AuthRouterDeps {
   db: Database;
   auth: Config["auth"];
+  rateLimiter: RateLimiter;
+  rateLimits?: AuthRateLimits;
 }
 
-export function authRouter({ db, auth }: AuthRouterDeps): Router {
+export function authRouter({
+  db,
+  auth,
+  rateLimiter,
+  rateLimits = DEFAULT_AUTH_RATE_LIMITS,
+}: AuthRouterDeps): Router {
   const router = Router();
+  const limits = authRateLimitRules(rateLimits);
 
   // Responses here carry tokens or credentials: no browser, proxy or CDN may cache them.
   router.use((_req, res, next) => {
@@ -31,28 +42,47 @@ export function authRouter({ db, auth }: AuthRouterDeps): Router {
 
   // Express 5 forwards a rejected promise from an async handler to the error handler,
   // so no try/catch or wrapper is needed here (see ADR-003).
-  router.post("/register", validate({ body: registerBody }), async (_req, res) => {
-    const { body } = res.locals.validated as Validated<{ body: typeof registerBody }>;
-    const user = await registerUser(db, body);
-    res.status(201).json({ success: true, data: { user } });
-  });
+  //
+  // Rate limits run AFTER validation (the per-email key needs the normalised email) and
+  // BEFORE any password work, so a throttled caller costs us a Redis call, not an Argon2
+  // hash. Counting is atomic with the check, so parallel guesses cannot all slip through.
+  router.post(
+    "/register",
+    validate({ body: registerBody }),
+    rateLimit(rateLimiter, [limits.register]),
+    async (_req, res) => {
+      const { body } = res.locals.validated as Validated<{ body: typeof registerBody }>;
+      const user = await registerUser(db, body);
+      res.status(201).json({ success: true, data: { user } });
+    },
+  );
 
-  router.post("/login", validate({ body: loginBody }), async (req, res) => {
-    const { body } = res.locals.validated as Validated<{ body: typeof loginBody }>;
-    const result = await loginUser(
-      db,
-      body,
-      { userAgent: req.get("user-agent"), ipAddress: req.ip },
-      auth,
-    );
+  router.post(
+    "/login",
+    validate({ body: loginBody }),
+    rateLimit(rateLimiter, [limits.loginPerIp, limits.loginPerIpAndEmail]),
+    async (req, res) => {
+      const { body } = res.locals.validated as Validated<{ body: typeof loginBody }>;
+      const result = await loginUser(
+        db,
+        body,
+        { userAgent: req.get("user-agent"), ipAddress: req.ip },
+        auth,
+      );
 
-    // Refresh token: cookie only. Access token: body, held in memory by the client.
-    setRefreshCookie(res, result.refreshToken, auth);
-    res.status(200).json({
-      success: true,
-      data: { user: result.user, accessToken: result.accessToken, expiresIn: result.expiresIn },
-    });
-  });
+      // The real owner got in: forgive their failed attempts. Only the per-(IP, email)
+      // budget is cleared; the per-IP one keeps counting, or a credential-stuffing
+      // script could reset its budget by logging into an account it owns.
+      await resetRateLimit(rateLimiter, limits.loginPerIpAndEmail, req, res);
+
+      // Refresh token: cookie only. Access token: body, held in memory by the client.
+      setRefreshCookie(res, result.refreshToken, auth);
+      res.status(200).json({
+        success: true,
+        data: { user: result.user, accessToken: result.accessToken, expiresIn: result.expiresIn },
+      });
+    },
+  );
 
   // No body: the refresh token travels in the cookie. SameSite=Strict keeps other sites
   // from triggering this call with the user's cookie (see cookies.ts).
