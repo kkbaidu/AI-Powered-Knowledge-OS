@@ -30,6 +30,7 @@ env:
   MINIO_ROOT_PASSWORD: testtesttest
   MINIO_PORT: 9000
   MINIO_HOST: localhost
+  JWT_ACCESS_SECRET: ci-only-secret-not-used-anywhere-else-0123456789
 
 jobs:
   # Fast static checks: does the code compile, type-check (tests included) and lint?

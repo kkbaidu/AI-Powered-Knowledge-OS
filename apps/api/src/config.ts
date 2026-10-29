@@ -17,6 +17,17 @@ const envSchema = z.object({
   MINIO_ROOT_PASSWORD: z.string().min(1),
   MINIO_PORT: z.coerce.number().int().positive(),
   MINIO_HOST: z.string().default("localhost"),
+
+  // No default on purpose: a built-in secret would be a known secret. HS256 needs a
+  // key at least as long as the hash output (32 bytes) to be as strong as it claims.
+  JWT_ACCESS_SECRET: z.string().min(32, "must be at least 32 characters"),
+  // Lifetimes in seconds. Access tokens are short because they cannot be revoked
+  // (verified without a DB hit); refresh tokens are long because they are revocable.
+  ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().positive().default(15 * 60),
+  REFRESH_TOKEN_TTL_SECONDS: z.coerce.number().int().positive().default(30 * 24 * 60 * 60),
+}).refine((e) => e.REFRESH_TOKEN_TTL_SECONDS > e.ACCESS_TOKEN_TTL_SECONDS, {
+  path: ["REFRESH_TOKEN_TTL_SECONDS"],
+  message: "must be longer than ACCESS_TOKEN_TTL_SECONDS",
 });
 
 export class ConfigError extends Error {
@@ -61,6 +72,12 @@ export function parseConfig(env: NodeJS.ProcessEnv) {
       port: e.MINIO_PORT,
       rootUser: e.MINIO_ROOT_USER,
       rootPassword: e.MINIO_ROOT_PASSWORD,
+    }),
+
+    auth: Object.freeze({
+      accessTokenSecret: e.JWT_ACCESS_SECRET,
+      accessTokenTtlSeconds: e.ACCESS_TOKEN_TTL_SECONDS,
+      refreshTokenTtlSeconds: e.REFRESH_TOKEN_TTL_SECONDS,
     }),
   });
 }
