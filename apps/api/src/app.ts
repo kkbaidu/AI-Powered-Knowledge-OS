@@ -4,6 +4,8 @@ import { httpLogger } from "./http/middleware/httpLogger.js";
 import { errorHandler } from "./http/middleware/errorHandler.js";
 import { notFound } from "./http/middleware/notFound.js";
 import { healthRouter, type HealthDeps } from "./http/routes/health.js";
+import { authRouter } from "./http/routes/auth.js";
+import { createDb } from "./db/client.js";
 
 // Everything the app needs injected: today that is exactly what health checks use.
 export type AppDependencies = HealthDeps;
@@ -16,7 +18,11 @@ export function createApp(deps: AppDependencies): Express {
   app.use(httpLogger);
   app.use(express.json({ limit: "1mb" })); // oversize bodies become 413 via the error handler
 
+  // One Drizzle instance wrapping the shared pool (see db/client.ts).
+  const db = createDb(deps.pgPool);
+
   app.use("/api/v1", healthRouter(deps));
+  app.use("/api/v1/auth", authRouter({ db }));
 
   app.use(notFound);
   app.use(errorHandler);
