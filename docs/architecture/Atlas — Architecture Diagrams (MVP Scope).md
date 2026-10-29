@@ -2,6 +2,8 @@
 
 Scope: Phase 0–3 (foundation, auth, knowledge ingestion, RAG chat). Update these as you build — they should reflect what the code actually does, not the aspirational doc.
 
+**Status legend:** diagrams 2 and 4 are split into **Implemented** (matches the code on `main`) and **Planned** (not built yet). Last verified against code: 2026-10-28.
+
 ---
 
 ## 1. System Overview
@@ -43,18 +45,99 @@ flowchart TB
 
 ---
 
-## 2. Data Model — ER Diagram (MVP tables)
+## 2. Data Model — ER Diagram
+
+### 2a. Implemented: identity domain (migrations `0000`–`0001`)
+
+Source of truth: `apps/api/src/db/schema/identity.ts`. Table names are plural (`user` is a reserved word in Postgres). Relationship labels show the foreign key's `ON DELETE` behavior.
 
 ```mermaid
 erDiagram
-    USER ||--o{ SESSION : has
-    USER ||--o{ ORGANIZATION_MEMBER : has
-    ORGANIZATION ||--o{ ORGANIZATION_MEMBER : has
-    ORGANIZATION ||--o{ WORKSPACE : owns
-    ORGANIZATION ||--o{ ROLE : defines
-    ROLE ||--o{ ROLE_PERMISSION : has
-    PERMISSION ||--o{ ROLE_PERMISSION : grants
-    ROLE ||--o{ ORGANIZATION_MEMBER : assigned_to
+    users ||--o{ sessions : "owns (CASCADE)"
+    users ||--o{ organizations : "owns (RESTRICT)"
+    users ||--o{ organization_members : "joins as (CASCADE)"
+    organizations ||--o{ organization_members : "has (CASCADE)"
+    organizations ||--o{ roles : "defines (CASCADE)"
+    roles ||--o{ organization_members : "assigned to (RESTRICT)"
+    roles ||--o{ role_permissions : "grants (CASCADE)"
+    permissions ||--o{ role_permissions : "granted via (CASCADE)"
+
+    users {
+        uuid id PK "gen_random_uuid()"
+        text email UK "unique on lower(email)"
+        text password_hash "nullable, OAuth users have none"
+        text display_name
+        user_status status "pending_verification | active | suspended"
+        timestamptz created_at
+        timestamptz updated_at
+    }
+    sessions {
+        uuid id PK
+        uuid user_id FK
+        text refresh_token_hash UK "SHA-256, never the raw token"
+        text previous_token_hash "reuse detection after rotation"
+        text device_info
+        inet ip_address
+        boolean revoked
+        timestamptz expires_at
+        timestamptz last_used_at
+        timestamptz created_at
+        timestamptz updated_at
+    }
+    organizations {
+        uuid id PK
+        text name
+        text slug UK
+        uuid owner_id FK
+        timestamptz created_at
+        timestamptz updated_at
+    }
+    organization_members {
+        uuid id PK
+        uuid organization_id FK
+        uuid user_id FK
+        uuid role_id FK
+        member_status status "active | suspended"
+        timestamptz joined_at
+        timestamptz created_at
+        timestamptz updated_at
+    }
+    roles {
+        uuid id PK
+        uuid organization_id FK
+        text name "unique per organization"
+        boolean is_default "copied from defaults at org creation"
+        timestamptz created_at
+        timestamptz updated_at
+    }
+    permissions {
+        uuid id PK
+        text name UK "resource.action, e.g. document.read"
+        text description
+    }
+    role_permissions {
+        uuid role_id PK, FK
+        uuid permission_id PK, FK
+    }
+```
+
+Constraints and indexes not visible in the diagram:
+
+| Table | Constraint / index | Why |
+|---|---|---|
+| `users` | unique index on `lower(email)` | `A@x.com` and `a@x.com` are one account; lookups must use `lower(email) = $1` |
+| `sessions` | unique `refresh_token_hash`; indexes on `previous_token_hash`, `user_id`, `expires_at` | refresh lookup, reuse detection, "revoke all my sessions", expired-session cleanup |
+| `organization_members` | unique `(organization_id, user_id)`; indexes on `user_id`, `role_id` | one membership per org; "which orgs is this user in" |
+| `roles` | unique `(organization_id, name)` | role names are unique within an organization |
+| `role_permissions` | composite PK `(role_id, permission_id)`; index on `permission_id` | no duplicate grants; "which roles have permission X" |
+
+`ON DELETE` summary: **CASCADE** where a child has no meaning without its parent (sessions, memberships, roles, join rows). **RESTRICT** where deletion must be a conscious act (a user who owns an organization; a role that members still hold).
+
+### 2b. Planned: knowledge and chat domain (Phase 2–3, not built)
+
+```mermaid
+erDiagram
+    organizations ||--o{ WORKSPACE : owns
     WORKSPACE ||--o{ WORKSPACE_MEMBER : has
     WORKSPACE ||--o{ DOCUMENT : contains
     DOCUMENT ||--o{ DOCUMENT_VERSION : has
@@ -65,44 +148,6 @@ erDiagram
     MESSAGE ||--o{ CITATION : cites
     CITATION }o--|| CHUNK : references
 
-    USER {
-        uuid id PK
-        string email
-        string password_hash
-        string status
-        timestamp created_at
-    }
-    SESSION {
-        uuid id PK
-        uuid user_id FK
-        string refresh_token_hash
-        string previous_token_hash
-        string device_info
-        timestamp expires_at
-        boolean revoked
-    }
-    ORGANIZATION {
-        uuid id PK
-        string name
-        string slug
-        uuid owner_id FK
-    }
-    ORGANIZATION_MEMBER {
-        uuid id PK
-        uuid organization_id FK
-        uuid user_id FK
-        uuid role_id FK
-        string status
-    }
-    ROLE {
-        uuid id PK
-        uuid organization_id FK
-        string name
-    }
-    PERMISSION {
-        uuid id PK
-        string name
-    }
     WORKSPACE {
         uuid id PK
         uuid organization_id FK
@@ -154,6 +199,8 @@ erDiagram
     }
 ```
 
+The `vector` extension is already enabled (migration `0000_enable_pgvector`), so `EMBEDDING.vector` needs no extra setup.
+
 ---
 
 ## 3. Auth Flow — Login, Refresh, Rotation, Reuse Detection
@@ -194,21 +241,62 @@ sequenceDiagram
 
 ## 4. Request Lifecycle — Middleware Chain
 
+### 4a. Implemented (`apps/api/src/app.ts`)
+
+Order matters: the request ID exists before logging, logging wraps everything after it, and the error handler is last so it catches anything thrown or passed to `next(err)` above it.
+
+```mermaid
+flowchart LR
+    Req[Incoming Request] --> ReqId["requestId<br/>accept safe X-Request-Id or generate UUID<br/>set X-Request-Id header"]
+    ReqId --> Log["httpLogger (pino-http)<br/>binds reqId to req.log<br/>redacts secrets, no headers/bodies"]
+    Log --> Json["express.json<br/>1 MB limit"]
+    Json --> Router{"Route match<br/>/api/v1/*"}
+    Router -->|"GET /health/live"| Live["Liveness<br/>no dependency checks"]
+    Router -->|"GET /health/ready, /health"| Ready["Readiness<br/>Postgres + Redis, 2s timeout each<br/>503 once shutting down"]
+    Router -->|no match| NF["notFound<br/>creates NotFoundError"]
+
+    Json -.->|"malformed or oversize body"| EH
+    Live --> Res[Response]
+    Ready --> Res
+    NF --> EH["errorHandler<br/>AppError to standard shape<br/>unknown errors to generic 500"]
+    EH --> Res
+
+    classDef built fill:#e6f4ea,stroke:#2e7d32,color:#111;
+    class ReqId,Log,Json,Router,Live,Ready,NF,EH built;
+```
+
+Per-route middleware (not in the global chain): `validate({ body, params, query })` runs Zod, collects every issue into one `ValidationError`, and exposes parsed values as `res.locals.validated`. It is built and tested but not yet attached to a route (first use: Day 3 auth endpoints).
+
+Every error response, from any stage, has the same shape:
+
+```json
+{ "success": false, "error": { "code": "DOCUMENT_NOT_FOUND", "message": "Document does not exist", "details": [] } }
+```
+
+`details` appears only for validation errors. Status codes: 401 `AUTH_ERROR`, 403 `PERMISSION_ERROR`, 404 `RESOURCE_NOT_FOUND` / `ROUTE_NOT_FOUND`, 409 `BUSINESS_RULE_ERROR`, 413 `PAYLOAD_TOO_LARGE`, 422 `VALIDATION_ERROR` / `MALFORMED_JSON`, 500 `INTERNAL_ERROR`, 502 `AI_PROVIDER_ERROR`.
+
+### 4b. Planned: full chain once auth and RBAC land
+
 ```mermaid
 flowchart LR
     Req[Incoming Request] --> ReqId[Request ID]
     ReqId --> Log[Structured Logger]
-    Log --> RateLimit[Rate Limiter]
-    RateLimit --> AuthMW[Auth Middleware<br/>verify JWT]
-    AuthMW --> OrgMW[Org Membership Check]
-    OrgMW --> WsMW[Workspace Permission Check]
+    Log --> RateLimit["Rate Limiter<br/>(planned)"]
+    RateLimit --> AuthMW["Auth Middleware<br/>verify JWT (planned)"]
+    AuthMW --> OrgMW["Org Membership Check<br/>(planned)"]
+    OrgMW --> WsMW["Workspace Permission Check<br/>(planned)"]
     WsMW --> Validate[Zod Validation]
     Validate --> Controller[Route Handler]
-    Controller --> Service[Service Layer]
-    Service --> Repo[Data Access Layer]
+    Controller --> Service["Service Layer<br/>(planned)"]
+    Service --> Repo["Data Access Layer<br/>(Drizzle)"]
     Repo --> DB[(Postgres)]
     Controller --> ErrorHandler[Centralized Error Handler]
     ErrorHandler --> Res[Response]
+
+    classDef built fill:#e6f4ea,stroke:#2e7d32,color:#111;
+    classDef planned fill:#fff8e1,stroke:#f9a825,stroke-dasharray: 4 3,color:#111;
+    class ReqId,Log,Validate,ErrorHandler,Repo,DB built;
+    class RateLimit,AuthMW,OrgMW,WsMW,Service,Controller planned;
 ```
 
 ---
