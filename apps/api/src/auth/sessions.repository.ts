@@ -1,4 +1,4 @@
-import { and, eq, gt, sql } from "drizzle-orm";
+import { and, eq, gt, or, sql } from "drizzle-orm";
 import type { DbExecutor } from "../db/client.js";
 import { sessions } from "../db/schema/index.js";
 
@@ -61,4 +61,28 @@ export async function findSessionByPreviousHash(
 
 export async function revokeSession(executor: DbExecutor, sessionId: string): Promise<void> {
   await executor.update(sessions).set({ revoked: true }).where(eq(sessions.id, sessionId));
+}
+
+// Logout. Matches the CURRENT or the PREVIOUS token, so a logout that races a refresh
+// (sent with the cookie from just before the rotation) still ends the session instead of
+// silently doing nothing. Returns the session id if one was revoked, null otherwise.
+// Already-revoked sessions are skipped so repeating a logout is a harmless no-op.
+export async function revokeSessionByTokenHash(
+  executor: DbExecutor,
+  tokenHash: string,
+): Promise<string | null> {
+  const [row] = await executor
+    .update(sessions)
+    .set({ revoked: true })
+    .where(
+      and(
+        or(
+          eq(sessions.refreshTokenHash, tokenHash),
+          eq(sessions.previousTokenHash, tokenHash),
+        ),
+        eq(sessions.revoked, false),
+      ),
+    )
+    .returning({ id: sessions.id });
+  return row?.id ?? null;
 }

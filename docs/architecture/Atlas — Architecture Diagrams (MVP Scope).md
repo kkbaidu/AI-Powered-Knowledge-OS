@@ -240,6 +240,12 @@ sequenceDiagram
             A-->>C: 401 REFRESH_TOKEN_REUSED (cookie cleared, force re-login)
         end
     end
+
+    Note over C,A: Logout
+    C->>A: POST /auth/logout (cookie: refresh_token)
+    A->>DB: revoke the session whose current or previous hash matches
+    A-->>C: 204 (cookie cleared, even if the token was unknown)
+    Note over C,A: The access token already issued stays valid until it expires (stateless)
 ```
 
 ---

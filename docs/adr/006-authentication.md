@@ -60,6 +60,17 @@ the auth middleware. Each step appends its decisions here.
 | Token source | Cookie only (a 40-line parser, no dependency). The body and the `Authorization` header are ignored (tested). | Keeps the token out of anything that gets logged or cached, and keeps `SameSite=Strict` meaningful. |
 | Logging | Reuse is logged at `warn` with user and session ids, never the token | Theft signals need to be visible to operators. |
 
+## Logout
+
+| Area | Decision | Why |
+|---|---|---|
+| Response | Always 204 with no body, and the cookie is cleared, whether or not a valid token was sent | Idempotent and safe to retry. Nothing is revealed about which tokens exist. The goal state ("this token no longer works") already holds when the token is unknown. |
+| Matching | Revokes the session whose CURRENT or PREVIOUS hash matches | A logout that races a refresh carries the previous token. Matching only the current one would silently do nothing. Possessing either token is already enough to hold the session. |
+| Scope | One session (this device). Other sessions are untouched (tested). | Matches what "log out" means on one device. "Log out everywhere" needs the authenticated user, so it comes with the auth middleware. |
+| Cookie clearing | Same `path`, `secure` and `sameSite` as when it was set | A clear with different attributes targets a different cookie and the browser keeps the real one. Tested. |
+| Access token | Not invalidated. It stays valid until it expires (at most 15 minutes). A test documents this. | Verifying it never reads the database, which is the reason to use a JWT at all. Instant revocation needs a per-request session lookup; see the middleware decision. |
+| CSRF | No extra token | `SameSite=Strict` stops cross-site requests from carrying the cookie, and a forged logout only signs the user out. |
+
 ## Known limitations / follow-ups
 - Only one previous hash is stored. A token two rotations old matches nothing: it is rejected but the session is not revoked (tested and documented). Fix: a `session_token_history` table, or a token family id.
 - No rate limiting yet. Login is the main brute-force target and register an enumeration target. Needs a Redis-backed limiter per IP and per email.

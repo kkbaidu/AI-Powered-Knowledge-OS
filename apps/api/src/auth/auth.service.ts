@@ -10,6 +10,7 @@ import {
   findSessionByPreviousHash,
   insertSession,
   revokeSession,
+  revokeSessionByTokenHash,
   rotateSession,
 } from "./sessions.repository.js";
 import { generateRefreshToken, hashRefreshToken } from "./tokens.js";
@@ -226,4 +227,20 @@ async function rejectUnrotatableToken(
     "Refresh token reuse detected, session revoked",
   );
   throw new AuthError("Refresh token reuse detected", "REFRESH_TOKEN_REUSED");
+}
+
+// Ends the session the presented refresh token belongs to. Deliberately forgiving: no
+// token, an unknown token and an already-ended session all succeed quietly. The goal
+// state is "this token no longer works", and it already holds, so there is nothing to
+// report and nothing to learn about which tokens exist. This also makes the call safe
+// to retry. Returns the revoked session id (for logging) or null.
+//
+// Note what this does NOT do: the access token already issued stays valid until it
+// expires (at most ACCESS_TOKEN_TTL), because verifying it never touches the database.
+export async function logoutSession(
+  db: DbExecutor,
+  presentedToken: string | undefined,
+): Promise<string | null> {
+  if (!presentedToken) return null;
+  return revokeSessionByTokenHash(db, hashRefreshToken(presentedToken));
 }

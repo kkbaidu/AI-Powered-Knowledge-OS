@@ -2,7 +2,7 @@ import { Router } from "express";
 import type { Config } from "../../config.js";
 import type { Database } from "../../db/client.js";
 import { loginBody, registerBody } from "../../auth/auth.schemas.js";
-import { loginUser, refreshSession, registerUser } from "../../auth/auth.service.js";
+import { loginUser, logoutSession, refreshSession, registerUser } from "../../auth/auth.service.js";
 import { clearRefreshCookie, readCookie, REFRESH_COOKIE_NAME, setRefreshCookie } from "../../auth/cookies.js";
 import { AppError, AuthError } from "../../types/errors.js";
 import { validate, type Validated } from "../middleware/validate.js";
@@ -70,6 +70,15 @@ export function authRouter({ db, auth }: AuthRouterDeps): Router {
       }
       throw err;
     }
+  });
+
+  // Always 204, with or without a valid cookie: logging out is idempotent, and the answer
+  // must not reveal whether the token was real. The cookie is cleared either way.
+  router.post("/logout", async (req, res) => {
+    const sessionId = await logoutSession(db, readCookie(req, REFRESH_COOKIE_NAME));
+    if (sessionId) req.log.info({ sessionId }, "Session logged out");
+    clearRefreshCookie(res, auth);
+    res.status(204).end();
   });
 
   return router;
