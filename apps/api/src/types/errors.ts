@@ -69,6 +69,19 @@ export class BusinessRuleError extends AppError {
   }
 }
 
+// 429. The caller is well-formed and authenticated as far as we know, but is sending too
+// much too fast. `retryAfterSeconds` is also sent as the Retry-After header.
+export class RateLimitError extends AppError {
+  constructor(retryAfterSeconds: number) {
+    super({
+      code: "RATE_LIMITED",
+      message: "Too many attempts. Try again later.",
+      statusCode: 429,
+      details: { retryAfterSeconds },
+    });
+  }
+}
+
 export class AiProviderError extends AppError {
   constructor(message = "The AI provider is unavailable", cause?: unknown) {
     super({ code: "AI_PROVIDER_ERROR", message, statusCode: 502, cause });

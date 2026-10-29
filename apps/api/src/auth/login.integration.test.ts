@@ -9,6 +9,7 @@ import { createDb } from "../db/client.js";
 import { sessions, users } from "../db/schema/index.js";
 import { assertDatabaseReady, unique } from "../test/integration.js";
 import { testAuthConfig } from "../test/auth.js";
+import { noopRateLimiter } from "../test/rateLimiter.js";
 import { hash } from "@node-rs/argon2";
 import { ARGON2_POLICY, hashPassword } from "./passwords.js";
 import { hashRefreshToken } from "./tokens.js";
@@ -17,8 +18,9 @@ import { verifyAccessToken } from "./accessTokens.js";
 const pool = createPostgresPool(config.postgres);
 const db = createDb(pool);
 const redis = { ping: async () => "PONG", on: () => undefined } as unknown as Redis;
-const app = createApp({ auth: testAuthConfig, pgPool: pool, redis });
+const app = createApp({ auth: testAuthConfig, rateLimiter: noopRateLimiter, pgPool: pool, redis });
 const productionApp = createApp({
+  rateLimiter: noopRateLimiter,
   auth: { ...testAuthConfig, secureCookies: true },
   pgPool: pool,
   redis,

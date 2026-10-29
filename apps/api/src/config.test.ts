@@ -61,6 +61,18 @@ describe("parseConfig", () => {
   });
 });
 
+describe("parseConfig: trust proxy", () => {
+  it("defaults to 0 hops (X-Forwarded-For is ignored) and coerces overrides", () => {
+    expect(parseConfig(validEnv).trustProxyHops).toBe(0);
+    expect(parseConfig({ ...validEnv, TRUST_PROXY_HOPS: "2" }).trustProxyHops).toBe(2);
+  });
+
+  it("rejects a negative or fractional hop count", () => {
+    expect(() => parseConfig({ ...validEnv, TRUST_PROXY_HOPS: "-1" })).toThrow(ConfigError);
+    expect(() => parseConfig({ ...validEnv, TRUST_PROXY_HOPS: "1.5" })).toThrow(ConfigError);
+  });
+});
+
 describe("parseConfig: auth", () => {
   it("defaults to a 15 minute access token and a 30 day refresh token", () => {
     const cfg = parseConfig(validEnv);

@@ -4,13 +4,21 @@ import { logger } from "./logger.js";
 import { createApp } from "./app.js";
 import { createPostgresPool } from "./infra/postgres.js";
 import { createRedisClient } from "./infra/redis.js";
+import { createRedisRateLimiter } from "./infra/rateLimiter.js";
 
 async function main() {
   const pgPool = createPostgresPool(config.postgres);
   const redis = createRedisClient(config.redis);
 
   let shuttingDown = false;
-  const app = createApp({ pgPool, redis, auth: config.auth, isShuttingDown: () => shuttingDown });
+  const app = createApp({
+    pgPool,
+    redis,
+    auth: config.auth,
+    rateLimiter: createRedisRateLimiter(redis),
+    trustProxyHops: config.trustProxyHops,
+    isShuttingDown: () => shuttingDown,
+  });
   const server = createServer(app);
 
   server.listen(config.port, () => {

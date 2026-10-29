@@ -5,6 +5,7 @@ import type { Redis } from "ioredis";
 import { config } from "../config.js";
 import { createApp } from "../app.js";
 import { testAuthConfig } from "../test/auth.js";
+import { noopRateLimiter } from "../test/rateLimiter.js";
 import { createPostgresPool } from "../infra/postgres.js";
 import { createDb } from "../db/client.js";
 import { users } from "../db/schema/index.js";
@@ -13,7 +14,7 @@ import { assertDatabaseReady, unique } from "../test/integration.js";
 const pool = createPostgresPool(config.postgres);
 const db = createDb(pool);
 // Register never touches Redis, so a stub is enough here.
-const app = createApp({ auth: testAuthConfig, pgPool: pool, redis: { ping: async () => "PONG", on: () => undefined } as unknown as Redis });
+const app = createApp({ auth: testAuthConfig, rateLimiter: noopRateLimiter, pgPool: pool, redis: { ping: async () => "PONG", on: () => undefined } as unknown as Redis });
 
 const createdEmails: string[] = [];
 const newEmail = (prefix = "reg") => {

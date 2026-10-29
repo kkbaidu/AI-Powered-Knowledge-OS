@@ -4,6 +4,7 @@ import { Redis } from "ioredis";
 import { config } from "./config.js";
 import { createApp } from "./app.js";
 import { testAuthConfig } from "./test/auth.js";
+import { noopRateLimiter } from "./test/rateLimiter.js";
 import { createPostgresPool } from "./infra/postgres.js";
 import { createRedisClient } from "./infra/redis.js";
 
@@ -30,7 +31,7 @@ afterAll(async () => {
 
 describe("health against real Postgres and Redis", () => {
   it("readiness is 200 when both dependencies are reachable", async () => {
-    const res = await request(createApp({ auth: testAuthConfig, pgPool: pool, redis })).get("/api/v1/health/ready");
+    const res = await request(createApp({ auth: testAuthConfig, rateLimiter: noopRateLimiter, pgPool: pool, redis })).get("/api/v1/health/ready");
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({
@@ -41,7 +42,7 @@ describe("health against real Postgres and Redis", () => {
   });
 
   it("readiness is 503 and names postgres when Postgres is unreachable", async () => {
-    const app = createApp({ auth: testAuthConfig, pgPool: deadPool, redis, checkTimeoutMs: 1_500 });
+    const app = createApp({ auth: testAuthConfig, rateLimiter: noopRateLimiter, pgPool: deadPool, redis, checkTimeoutMs: 1_500 });
 
     const res = await request(app).get("/api/v1/health/ready");
 
@@ -50,7 +51,7 @@ describe("health against real Postgres and Redis", () => {
   });
 
   it("readiness is 503 and names redis when Redis is unreachable", async () => {
-    const app = createApp({ auth: testAuthConfig, pgPool: pool, redis: deadRedis, checkTimeoutMs: 1_500 });
+    const app = createApp({ auth: testAuthConfig, rateLimiter: noopRateLimiter, pgPool: pool, redis: deadRedis, checkTimeoutMs: 1_500 });
 
     const res = await request(app).get("/api/v1/health/ready");
 
@@ -59,7 +60,7 @@ describe("health against real Postgres and Redis", () => {
   });
 
   it("liveness stays 200 even when both dependencies are unreachable", async () => {
-    const app = createApp({ auth: testAuthConfig, pgPool: deadPool, redis: deadRedis });
+    const app = createApp({ auth: testAuthConfig, rateLimiter: noopRateLimiter, pgPool: deadPool, redis: deadRedis });
 
     const res = await request(app).get("/api/v1/health/live");
 
@@ -67,7 +68,7 @@ describe("health against real Postgres and Redis", () => {
   });
 
   it("returns the standard error shape and a request ID for unknown routes", async () => {
-    const res = await request(createApp({ auth: testAuthConfig, pgPool: pool, redis })).get("/api/v1/does-not-exist");
+    const res = await request(createApp({ auth: testAuthConfig, rateLimiter: noopRateLimiter, pgPool: pool, redis })).get("/api/v1/does-not-exist");
 
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe("ROUTE_NOT_FOUND");
