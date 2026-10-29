@@ -10,6 +10,7 @@ const validEnv = {
   MINIO_ROOT_USER: "minio",
   MINIO_ROOT_PASSWORD: "miniosecret",
   MINIO_PORT: "9000",
+  JWT_ACCESS_SECRET: "test-secret-that-is-at-least-32-chars-long",
 };
 
 describe("parseConfig", () => {
@@ -56,5 +57,58 @@ describe("parseConfig", () => {
     const cfg = parseConfig(validEnv);
     expect(Object.isFrozen(cfg)).toBe(true);
     expect(Object.isFrozen(cfg.postgres)).toBe(true);
+    expect(Object.isFrozen(cfg.auth)).toBe(true);
+  });
+});
+
+describe("parseConfig: auth", () => {
+  it("defaults to a 15 minute access token and a 30 day refresh token", () => {
+    const cfg = parseConfig(validEnv);
+    expect(cfg.auth.accessTokenTtlSeconds).toBe(900);
+    expect(cfg.auth.refreshTokenTtlSeconds).toBe(2_592_000);
+    expect(cfg.auth.accessTokenSecret).toBe(validEnv.JWT_ACCESS_SECRET);
+  });
+
+  it("coerces TTL overrides to numbers", () => {
+    const cfg = parseConfig({
+      ...validEnv,
+      ACCESS_TOKEN_TTL_SECONDS: "60",
+      REFRESH_TOKEN_TTL_SECONDS: "3600",
+    });
+    expect(cfg.auth.accessTokenTtlSeconds).toBe(60);
+    expect(cfg.auth.refreshTokenTtlSeconds).toBe(3600);
+  });
+
+  it("requires JWT_ACCESS_SECRET (there is no default)", () => {
+    const broken: Record<string, string | undefined> = { ...validEnv };
+    delete broken.JWT_ACCESS_SECRET;
+    expect(() => parseConfig(broken)).toThrow(ConfigError);
+  });
+
+  it("rejects a secret shorter than 32 characters", () => {
+    expect(() => parseConfig({ ...validEnv, JWT_ACCESS_SECRET: "x".repeat(31) })).toThrow(
+      ConfigError,
+    );
+    expect(() => parseConfig({ ...validEnv, JWT_ACCESS_SECRET: "x".repeat(32) })).not.toThrow();
+  });
+
+  it("rejects non-positive or non-integer TTLs", () => {
+    for (const bad of ["0", "-5", "1.5", "abc"]) {
+      expect(() => parseConfig({ ...validEnv, ACCESS_TOKEN_TTL_SECONDS: bad })).toThrow(ConfigError);
+    }
+  });
+
+  it("rejects a refresh TTL that is not longer than the access TTL", () => {
+    try {
+      parseConfig({
+        ...validEnv,
+        ACCESS_TOKEN_TTL_SECONDS: "900",
+        REFRESH_TOKEN_TTL_SECONDS: "900",
+      });
+      expect.unreachable("should have thrown");
+    } catch (err) {
+      expect(err).toBeInstanceOf(ConfigError);
+      expect((err as ConfigError).issues.join("\n")).toContain("REFRESH_TOKEN_TTL_SECONDS");
+    }
   });
 });
