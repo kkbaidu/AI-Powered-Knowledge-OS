@@ -1,3 +1,4 @@
+import { eq, sql } from "drizzle-orm";
 import type { DbExecutor } from "../db/client.js";
 import { users } from "../db/schema/index.js";
 
@@ -15,4 +16,25 @@ export async function insertUserIfEmailFree(
 ): Promise<User | null> {
   const [row] = await executor.insert(users).values(values).onConflictDoNothing().returning();
   return row ?? null;
+}
+
+// Must compare lower(email) so the query can use the unique expression index
+// (users_email_lower_uq); a plain `email = $1` cannot. Callers pass an already
+// lowercased email (the Zod schema does that), and lowering both sides keeps this
+// correct even if a caller forgets.
+export async function findUserByEmail(executor: DbExecutor, email: string): Promise<User | null> {
+  const [row] = await executor
+    .select()
+    .from(users)
+    .where(sql`lower(${users.email}) = ${email.toLowerCase()}`)
+    .limit(1);
+  return row ?? null;
+}
+
+export async function updatePasswordHash(
+  executor: DbExecutor,
+  userId: string,
+  passwordHash: string,
+): Promise<void> {
+  await executor.update(users).set({ passwordHash }).where(eq(users.id, userId));
 }

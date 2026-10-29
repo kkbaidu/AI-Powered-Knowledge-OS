@@ -10,7 +10,7 @@ async function main() {
   const redis = createRedisClient(config.redis);
 
   let shuttingDown = false;
-  const app = createApp({ pgPool, redis, isShuttingDown: () => shuttingDown });
+  const app = createApp({ pgPool, redis, auth: config.auth, isShuttingDown: () => shuttingDown });
   const server = createServer(app);
 
   server.listen(config.port, () => {

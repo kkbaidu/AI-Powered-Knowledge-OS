@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, registerBody } from "./auth.schemas.js";
+import {
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+  loginBody,
+  registerBody,
+} from "./auth.schemas.js";
 
 const valid = { email: "ada@example.com", password: "a-long-enough-password" };
 
@@ -60,5 +65,25 @@ describe("registerBody", () => {
     const parsed = registerBody.parse({ ...valid, status: "suspended", id: "x", isAdmin: true });
     expect(parsed).toEqual(valid);
     expect(parsed).not.toHaveProperty("status");
+  });
+});
+
+describe("loginBody", () => {
+  it("normalises the email like registration does", () => {
+    expect(loginBody.parse({ email: "  ADA@Example.com ", password: "x" }).email).toBe(
+      "ada@example.com",
+    );
+  });
+
+  it("does not enforce the registration minimum length", () => {
+    expect(loginBody.safeParse({ email: "a@b.com", password: "short" }).success).toBe(true);
+  });
+
+  it("requires a non-empty password and bounds its size", () => {
+    expect(loginBody.safeParse({ email: "a@b.com", password: "" }).success).toBe(false);
+    expect(loginBody.safeParse({ email: "a@b.com" }).success).toBe(false);
+    expect(
+      loginBody.safeParse({ email: "a@b.com", password: "x".repeat(PASSWORD_MAX_LENGTH + 1) }).success,
+    ).toBe(false);
   });
 });

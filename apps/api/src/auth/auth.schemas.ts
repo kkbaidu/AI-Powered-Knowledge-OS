@@ -28,3 +28,13 @@ export const registerBody = z.object({
 });
 
 export type RegisterInput = z.output<typeof registerBody>;
+
+// Login deliberately does NOT enforce the registration length rules: the policy may
+// tighten over time and older accounts must still be able to sign in. It only bounds
+// the size (same DoS reasoning as above) and requires something to be present.
+export const loginBody = z.object({
+  email,
+  password: z.string().min(1, "is required").max(PASSWORD_MAX_LENGTH),
+});
+
+export type LoginInput = z.output<typeof loginBody>;

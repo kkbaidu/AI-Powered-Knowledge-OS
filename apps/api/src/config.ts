@@ -78,6 +78,9 @@ export function parseConfig(env: NodeJS.ProcessEnv) {
       accessTokenSecret: e.JWT_ACCESS_SECRET,
       accessTokenTtlSeconds: e.ACCESS_TOKEN_TTL_SECONDS,
       refreshTokenTtlSeconds: e.REFRESH_TOKEN_TTL_SECONDS,
+      // Secure cookies are only sent over HTTPS, so they are off outside production
+      // (local development runs on plain http://localhost).
+      secureCookies: e.NODE_ENV === "production",
     }),
   });
 }

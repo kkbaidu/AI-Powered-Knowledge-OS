@@ -3,6 +3,7 @@ import request from "supertest";
 import type { Pool } from "pg";
 import type { Redis } from "ioredis";
 import { createApp } from "./app.js";
+import { testAuthConfig } from "./test/auth.js";
 
 function fakePool(overrides: Partial<Pool> = {}): Pool {
   return {
@@ -22,7 +23,7 @@ function fakeRedis(overrides: Partial<Redis> = {}): Redis {
 
 describe("GET /api/v1/health/ready", () => {
   it("returns 200 when postgres and redis are both reachable", async () => {
-    const app = createApp({ pgPool: fakePool(), redis: fakeRedis() });
+    const app = createApp({ auth: testAuthConfig, pgPool: fakePool(), redis: fakeRedis() });
 
     const res = await request(app).get("/api/v1/health/ready");
 
@@ -38,7 +39,7 @@ describe("GET /api/v1/health/ready", () => {
     const brokenRedis = fakeRedis({
       ping: vi.fn().mockRejectedValue(new Error("ECONNREFUSED")),
     });
-    const app = createApp({ pgPool: fakePool(), redis: brokenRedis });
+    const app = createApp({ auth: testAuthConfig, pgPool: fakePool(), redis: brokenRedis });
 
     const res = await request(app).get("/api/v1/health/ready");
 
@@ -54,7 +55,7 @@ describe("GET /api/v1/health/ready", () => {
     const brokenPool = fakePool({
       query: vi.fn().mockRejectedValue(new Error("connection terminated")),
     });
-    const app = createApp({ pgPool: brokenPool, redis: fakeRedis() });
+    const app = createApp({ auth: testAuthConfig, pgPool: brokenPool, redis: fakeRedis() });
 
     const res = await request(app).get("/api/v1/health/ready");
 
@@ -63,7 +64,7 @@ describe("GET /api/v1/health/ready", () => {
   });
 
   it("returns the standard 404 shape for an unknown route", async () => {
-    const app = createApp({ pgPool: fakePool(), redis: fakeRedis() });
+    const app = createApp({ auth: testAuthConfig, pgPool: fakePool(), redis: fakeRedis() });
 
     const res = await request(app).get("/api/v1/nonsense");
 
@@ -77,6 +78,7 @@ describe("GET /api/v1/health/ready", () => {
 describe("health liveness and readiness", () => {
   it("liveness stays 200 even when every dependency is down", async () => {
     const app = createApp({
+      auth: testAuthConfig,
       pgPool: fakePool({ query: vi.fn().mockRejectedValue(new Error("down")) }),
       redis: fakeRedis({ ping: vi.fn().mockRejectedValue(new Error("down")) }),
     });
@@ -90,7 +92,7 @@ describe("health liveness and readiness", () => {
   it("liveness never touches dependencies", async () => {
     const pool = fakePool();
     const redis = fakeRedis();
-    const app = createApp({ pgPool: pool, redis });
+    const app = createApp({ auth: testAuthConfig, pgPool: pool, redis });
 
     await request(app).get("/api/v1/health/live");
 
@@ -100,7 +102,7 @@ describe("health liveness and readiness", () => {
 
   it("readiness reports 503 when a dependency hangs, instead of hanging itself", async () => {
     const hangingRedis = fakeRedis({ ping: vi.fn().mockReturnValue(new Promise(() => undefined)) });
-    const app = createApp({ pgPool: fakePool(), redis: hangingRedis, checkTimeoutMs: 50 });
+    const app = createApp({ auth: testAuthConfig, pgPool: fakePool(), redis: hangingRedis, checkTimeoutMs: 50 });
 
     const res = await request(app).get("/api/v1/health/ready");
 
@@ -109,7 +111,7 @@ describe("health liveness and readiness", () => {
   });
 
   it("readiness returns 503 shutting_down once shutdown has started", async () => {
-    const app = createApp({ pgPool: fakePool(), redis: fakeRedis(), isShuttingDown: () => true });
+    const app = createApp({ auth: testAuthConfig, pgPool: fakePool(), redis: fakeRedis(), isShuttingDown: () => true });
 
     const res = await request(app).get("/api/v1/health/ready");
 
@@ -118,7 +120,7 @@ describe("health liveness and readiness", () => {
   });
 
   it("keeps /health as an alias of readiness", async () => {
-    const app = createApp({ pgPool: fakePool(), redis: fakeRedis() });
+    const app = createApp({ auth: testAuthConfig, pgPool: fakePool(), redis: fakeRedis() });
     const res = await request(app).get("/api/v1/health");
     expect(res.status).toBe(200);
     expect(res.body.status).toBe("ready");
