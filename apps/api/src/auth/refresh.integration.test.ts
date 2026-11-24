@@ -193,6 +193,9 @@ describe("POST /api/v1/auth/refresh: reuse detection", () => {
     expect(replay.status).toBe(401);
     expect(replay.body.error.code).toBe("REFRESH_TOKEN_ROTATED");
     expect(replay.body.data).toBeUndefined();
+    // The winner's response delivers the new cookie. A loser that also touched the cookie
+    // (clearing it) could be processed last by the browser and log the user out.
+    expect(cookieLine(replay)).toBeUndefined();
     expect((await getSession(sessionId)).revoked).toBe(false);
 
     // the legitimate holder of the new token carries on
@@ -226,6 +229,7 @@ describe("POST /api/v1/auth/refresh: concurrency", () => {
     for (const r of losers) {
       expect(r.status).toBe(401);
       expect(r.body.error.code).toBe("REFRESH_TOKEN_ROTATED");
+      expect(cookieLine(r)).toBeUndefined(); // never clears the cookie the winner just set
     }
 
     expect((await getSession(sessionId)).revoked).toBe(false);

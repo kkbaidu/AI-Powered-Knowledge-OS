@@ -26,6 +26,14 @@ describe("registerBody", () => {
     }
   });
 
+  it("rejects non-ASCII addresses, which keeps JS toLowerCase() and Postgres lower() in agreement", () => {
+    // The duplicate check relies on lower(email) in Postgres matching the lowercase the
+    // schema applies in JS. For ASCII they are identical; for some Unicode they are not.
+    for (const email of ["üser@example.com", "user@exämple.com", "İ@example.com", "用户@example.com"]) {
+      expect(registerBody.safeParse({ ...valid, email }).success, email).toBe(false);
+    }
+  });
+
   it("rejects an email longer than 254 characters", () => {
     const email = `${"a".repeat(250)}@x.com`;
     expect(registerBody.safeParse({ ...valid, email }).success).toBe(false);

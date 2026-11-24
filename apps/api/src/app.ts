@@ -21,6 +21,9 @@ export type AppDependencies = HealthDeps & {
   trustProxyHops?: number;
 };
 
+// Exported so a test can prove the largest legitimate auth body still fits.
+export const AUTH_BODY_LIMIT = "4kb";
+
 export function createApp(deps: AppDependencies): Express {
   const app = express();
   app.disable("x-powered-by"); // do not advertise the framework
@@ -29,6 +32,12 @@ export function createApp(deps: AppDependencies): Express {
 
   app.use(requestId);
   app.use(httpLogger);
+  // The auth routes are unauthenticated and their largest legitimate body (a register
+  // request with every field at its maximum, fully JSON-escaped) is under 2 KB. Parse them
+  // with a 4 KB cap BEFORE the general parser; body-parser skips a request that is already
+  // parsed. Without this, anyone could make us buffer and parse 1 MB per request on
+  // /login and /register, and requests failing validation never consume rate-limit budget.
+  app.use("/api/v1/auth", express.json({ limit: AUTH_BODY_LIMIT }));
   app.use(express.json({ limit: "1mb" })); // oversize bodies become 413 via the error handler
 
   // One Drizzle instance wrapping the shared pool (see db/client.ts).

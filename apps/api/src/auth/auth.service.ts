@@ -176,11 +176,8 @@ export async function refreshSession(
     expiresAt: new Date(now.getTime() + settings.refreshTokenTtlSeconds * 1000),
   });
 
-  if (!session) {
-    await rejectUnrotatableToken(db, presentedHash, now, settings);
-    // rejectUnrotatableToken always throws; this satisfies the type checker.
-    throw new AuthError("Invalid refresh token", "INVALID_REFRESH_TOKEN");
-  }
+  // Declared Promise<never>: it always throws, so nothing below runs for a failed rotation.
+  if (!session) return rejectUnrotatableToken(db, presentedHash, now, settings);
 
   // The session is valid, but the account may have been suspended since login.
   // Checked after rotation (rotation is the atomic claim); a blocked user loses the session.
@@ -216,9 +213,12 @@ async function rejectUnrotatableToken(
   const ageSeconds = (now.getTime() - rotatedAt.getTime()) / 1000;
 
   if (ageSeconds < settings.refreshReuseGraceSeconds) {
-    // Almost certainly a concurrent request or a retry. The real user's browser already
-    // holds the new cookie, so a retry succeeds. We do not revoke, and we hand out
-    // nothing, so a thief replaying inside the window gains nothing.
+    // Almost certainly a concurrent request (two tabs sharing one cookie jar). The
+    // winning request's response is delivering the new cookie, so the caller just retries
+    // and succeeds. We do not revoke, and we hand out nothing, so a thief replaying inside
+    // the window gains nothing. The route must NOT clear the cookie on this code.
+    // Limit: if the winner's RESPONSE was lost (client still holds the old token), a
+    // retry after the grace period is indistinguishable from theft and ends the session.
     throw new AuthError("Refresh token was just rotated, retry", "REFRESH_TOKEN_ROTATED");
   }
 

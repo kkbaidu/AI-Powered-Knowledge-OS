@@ -101,9 +101,17 @@ export function authRouter({
       });
     } catch (err) {
       // A 401/403 means this cookie is dead (or the session was just revoked): tell the
-      // browser to drop it. A 5xx is OUR fault (say, the DB blipped), and must not log
-      // the user out, so the cookie is kept and the client can retry.
-      if (err instanceof AppError && (err.statusCode === 401 || err.statusCode === 403)) {
+      // browser to drop it. Two exceptions:
+      //  - A 5xx is OUR fault (say, the DB blipped) and must not log the user out.
+      //  - REFRESH_TOKEN_ROTATED means another request carrying this same cookie just won
+      //    the rotation, and ITS response is delivering the new cookie. Clearing here would
+      //    race with that Set-Cookie: if this (losing) response is processed last, the
+      //    browser ends up with no cookie and the user is logged out by a benign two-tab race.
+      if (
+        err instanceof AppError &&
+        (err.statusCode === 401 || err.statusCode === 403) &&
+        err.code !== "REFRESH_TOKEN_ROTATED"
+      ) {
         clearRefreshCookie(res, auth);
       }
       throw err;

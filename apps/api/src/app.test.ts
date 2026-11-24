@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import request from "supertest";
 import type { Pool } from "pg";
 import type { Redis } from "ioredis";
-import { createApp } from "./app.js";
+import { AUTH_BODY_LIMIT, createApp } from "./app.js";
 import { testAuthConfig } from "./test/auth.js";
 import { noopRateLimiter } from "./test/rateLimiter.js";
 
@@ -125,5 +125,45 @@ describe("health liveness and readiness", () => {
     const res = await request(app).get("/api/v1/health");
     expect(res.status).toBe(200);
     expect(res.body.status).toBe("ready");
+  });
+});
+
+
+describe("request body limits", () => {
+  const app = () =>
+    createApp({ auth: testAuthConfig, rateLimiter: noopRateLimiter, pgPool: fakePool(), redis: fakeRedis() });
+
+  it("rejects an oversized body on the unauthenticated auth routes with 413", async () => {
+    const body = { email: "a@example.com", password: "x", padding: "a".repeat(5000) };
+    for (const path of ["/api/v1/auth/login", "/api/v1/auth/register"]) {
+      const res = await request(app()).post(path).send(body);
+      expect(res.status, path).toBe(413);
+      expect(res.body.error.code).toBe("PAYLOAD_TOO_LARGE");
+    }
+  });
+
+  it("accepts a body just under the cap (it reaches validation instead)", async () => {
+    const res = await request(app())
+      .post("/api/v1/auth/login")
+      .send({ email: "nope", padding: "a".repeat(3000) });
+    expect(res.status).toBe(422);
+  });
+
+  it("keeps the cap well above the largest legitimate auth request", () => {
+    // Worst case: every field at its maximum and every character JSON-escaped to \uXXXX.
+    const worst = JSON.stringify({
+      email: `${"a".repeat(242)}@example.com`,
+      password: "\u0001".repeat(128),
+      displayName: "\u0001".repeat(100),
+    });
+    const limitBytes = Number.parseInt(AUTH_BODY_LIMIT, 10) * 1024;
+    expect(Buffer.byteLength(worst)).toBeLessThan(limitBytes / 2);
+  });
+
+  it("does not apply the small cap to other routes", async () => {
+    const res = await request(app())
+      .post("/api/v1/does-not-exist")
+      .send({ padding: "a".repeat(100_000) });
+    expect(res.status).toBe(404); // parsed fine, then not found; not 413
   });
 });

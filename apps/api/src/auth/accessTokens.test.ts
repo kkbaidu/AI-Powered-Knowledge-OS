@@ -103,6 +103,26 @@ describe("access tokens", () => {
     }
   });
 
+  it("rejects a correctly signed token whose sid or sub is not a string", async () => {
+    // Our server never issues these; the guard exists so a bug elsewhere (or a future second
+    // signer) cannot slip a numeric id into a query.
+    const now = Math.floor(Date.now() / 1000);
+    const make = (payload: Record<string, unknown>) =>
+      new SignJWT(payload)
+        .setProtectedHeader({ alg: "HS256" })
+        .setIssuer("atlas-api")
+        .setAudience("atlas-api")
+        .setExpirationTime(now + 60)
+        .sign(key(settings.accessTokenSecret));
+
+    for (const token of [
+      await make({ sub: "u", sid: 123 }),
+      await make({ sub: 456, sid: "s" }),
+    ]) {
+      expect((await rejection(verifyAccessToken(token, settings))).code).toBe("INVALID_ACCESS_TOKEN");
+    }
+  });
+
   it("rejects garbage", async () => {
     for (const junk of ["", "abc", "a.b.c"]) {
       expect((await rejection(verifyAccessToken(junk, settings))).code).toBe("INVALID_ACCESS_TOKEN");
